@@ -39,9 +39,9 @@ export default function ClientesPage() {
   ).length;
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-white">
-      <div className="mx-auto w-full max-w-md px-4 pb-24 pt-5 lg:max-w-6xl lg:pb-8">
-        <header className="rounded-[2rem] bg-neutral-900 p-5">
+    <main className="app-page">
+      <div className="page-wrap">
+        <header className="hero-panel">
           <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-400">
             PH10
           </p>

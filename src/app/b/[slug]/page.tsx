@@ -46,9 +46,9 @@ export default function PaginaCliente() {
   }
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-white">
+    <main className="min-h-screen bg-[#24211e] text-[#f3ead8]">
       <div className="mx-auto w-full max-w-md px-4 py-5 lg:max-w-4xl">
-        <header className="rounded-[2rem] bg-neutral-900 p-5">
+        <header className="hero-panel">
           <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-400">
             PH10
           </p>
