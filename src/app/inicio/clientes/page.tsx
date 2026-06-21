@@ -89,6 +89,7 @@ function whatsappLink(item: (typeof agendamentos)[number]) {
   return `https://wa.me/55${item.whatsapp}?text=${msg}`;
 }
 
+
 export default function InicioPage() {
   const [diaSelecionado, setDiaSelecionado] = useState("2026-06-21");
 
