@@ -8,7 +8,6 @@ export default function InicioLayout({
   return (
     <>
       <BarberSidebar />
-
       <div className="lg:pl-72">{children}</div>
     </>
   );
