@@ -58,8 +58,20 @@ button { cursor: pointer; }
   box-shadow: 0 24px 70px rgba(10, 8, 6, .2);
 }
 .hero-panel::after {
-  content: ""; position: absolute; width: 13rem; height: 13rem; right: -4rem; top: -6rem;
-  border: 1px solid rgba(216, 194, 158, .17); border-radius: 999px;
+  content: "";
+  position: absolute;
+  width: 13rem;
+  height: 13rem;
+  right: -4rem;
+  top: -6rem;
+  border: 1px solid rgba(216, 194, 158, .17);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.hero-panel > * {
+  position: relative;
+  z-index: 1;
 }
 .eyebrow { color: var(--sand); font-size: .68rem; font-weight: 800; letter-spacing: .32em; text-transform: uppercase; }
 .page-title { margin-top: .7rem; font-size: clamp(2.4rem, 7vw, 4.8rem); line-height: .9; }
