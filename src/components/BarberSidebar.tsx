@@ -18,10 +18,10 @@ export default function BarberSidebar() {
 
   return (
     <>
-      <button onClick={() => setAberto(true)} aria-label="Abrir menu" className="fixed left-4 top-4 z-[80] grid h-11 w-11 place-items-center rounded-full border border-[#eee2c9]/20 bg-[#302b27] text-lg text-[#eee2c9] shadow-xl lg:hidden">☰</button>
+      <button onClick={() => setAberto(true)} aria-label="Abrir menu" className="mobile-menu-trigger fixed left-4 z-[80] grid h-11 w-11 place-items-center rounded-full border border-[#eee2c9]/20 bg-[#302b27] text-lg text-[#eee2c9] shadow-xl lg:hidden">☰</button>
       {aberto && <button onClick={() => setAberto(false)} aria-label="Fechar menu" className="fixed inset-0 z-[90] bg-black/65 backdrop-blur-sm lg:hidden" />}
 
-      <aside className={`fixed left-0 top-0 z-[100] flex h-screen w-72 flex-col border-r border-[#eee2c9]/10 bg-[#211f1c] p-5 text-[#f3ead8] transition-transform duration-300 lg:translate-x-0 ${aberto ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside className={`mobile-sidebar fixed left-0 top-0 z-[100] flex w-72 flex-col border-r border-[#eee2c9]/10 bg-[#211f1c] p-5 text-[#f3ead8] transition-transform duration-300 lg:translate-x-0 ${aberto ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="border-b border-[#eee2c9]/10 pb-6">
           <div className="flex items-center gap-3">
             <div className="grid h-11 w-11 place-items-center rounded-full border border-[#d8c29e]/50 text-sm font-black text-[#d8c29e]">PH</div>

@@ -58,8 +58,29 @@ input[autocomplete="name"]:focus {
   text-transform: uppercase;
 }
 
-.app-page { min-height: 100vh; color: var(--foreground); }
-.page-wrap { margin-inline: auto; width: 100%; max-width: 74rem; padding: 1.25rem 1rem 6rem; }
+.app-page { min-height: 100dvh; color: var(--foreground); }
+.page-wrap {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 74rem;
+  padding: calc(env(safe-area-inset-top, 0px) + 5rem) 1rem calc(env(safe-area-inset-bottom, 0px) + 6rem);
+}
+
+.mobile-menu-trigger { top: calc(env(safe-area-inset-top, 0px) + 1rem); }
+.mobile-sidebar {
+  height: 100dvh;
+  padding-top: max(1.25rem, calc(env(safe-area-inset-top, 0px) + 1.25rem));
+  padding-bottom: max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 1.25rem));
+}
+
+.safe-modal-shell {
+  padding: max(1rem, env(safe-area-inset-top, 0px)) 1rem max(1rem, env(safe-area-inset-bottom, 0px));
+}
+.safe-modal-card {
+  max-height: calc(100dvh - max(1rem, env(safe-area-inset-top, 0px)) - max(1rem, env(safe-area-inset-bottom, 0px)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 
 .hero-panel {
   position: relative;
@@ -129,5 +150,8 @@ input[autocomplete="name"]:focus {
 
 @media (min-width: 1024px) {
   .page-wrap { padding: 2rem 2.25rem 3rem; }
+  .mobile-sidebar { height: 100vh; padding: 1.25rem; }
+  .safe-modal-shell { padding: 1rem; }
+  .safe-modal-card { max-height: 90vh; }
   .hero-panel { padding: 2rem; border-radius: 1.75rem; }
 }

@@ -200,11 +200,11 @@ export default function ClientesPage() {
       {modalNovoAberto && (
         <div
           onClick={() => setModalNovoAberto(false)}
-          className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 p-4 lg:items-center"
+          className="safe-modal-shell fixed inset-0 z-[200] flex items-end justify-center bg-black/70 lg:items-center"
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
+            className="safe-modal-card w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -263,11 +263,11 @@ export default function ClientesPage() {
       {clienteHistorico && (
         <div
           onClick={() => setClienteHistorico(null)}
-          className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 p-4 lg:items-center"
+          className="safe-modal-shell fixed inset-0 z-[200] flex items-end justify-center bg-black/70 lg:items-center"
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
+            className="safe-modal-card w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
           >
             <div className="flex items-start justify-between gap-4">
               <div>

@@ -511,11 +511,11 @@ export default function AgendaPage() {
       {modalHorariosAberto && (
         <div
           onClick={() => setModalHorariosAberto(false)}
-          className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 p-4 lg:items-center"
+          className="safe-modal-shell fixed inset-0 z-[200] flex items-end justify-center bg-black/70 lg:items-center"
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
+            className="safe-modal-card w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
           >
             <div className="flex items-start justify-between gap-4">
               <div>

@@ -541,11 +541,11 @@ export default function ServicosPage() {
       {modalTipo === "escolha" && (
         <div
           onClick={fecharTudo}
-          className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 p-4 lg:items-center"
+          className="safe-modal-shell fixed inset-0 z-[200] flex items-end justify-center bg-black/70 lg:items-center"
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
+            className="safe-modal-card w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
           >
             <h2 className="text-2xl font-black">O que deseja criar?</h2>
             <p className="mt-1 text-sm text-neutral-400">
@@ -590,11 +590,11 @@ export default function ServicosPage() {
       {modalTipo === "servico" && (
         <div
           onClick={fecharTudo}
-          className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 p-4 lg:items-center"
+          className="safe-modal-shell fixed inset-0 z-[200] flex items-end justify-center bg-black/70 lg:items-center"
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
+            className="safe-modal-card w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -664,11 +664,11 @@ export default function ServicosPage() {
       {modalTipo === "combo" && (
         <div
           onClick={fecharTudo}
-          className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 p-4 lg:items-center"
+          className="safe-modal-shell fixed inset-0 z-[200] flex items-end justify-center bg-black/70 lg:items-center"
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
+            className="safe-modal-card w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
