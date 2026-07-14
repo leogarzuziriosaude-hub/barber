@@ -26,6 +26,7 @@ html { background: var(--background); }
 
 body {
   margin: 0;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 90% 0%, rgba(216, 194, 158, .09), transparent 28rem),
     var(--background);

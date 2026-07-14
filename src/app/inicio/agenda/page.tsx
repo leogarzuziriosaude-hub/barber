@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { carregarAgendamentos, carregarConfiguracaoAgenda, dataLocal, proximosDias, salvarAgendamentos, salvarConfiguracaoAgenda } from "@/lib/barber-storage";
+import { BloqueioAgenda, StatusAtendimento, carregarAgendamentos, carregarBloqueios, carregarConfiguracaoAgenda, dataLocal, obterStatusAtendimento, proximosDias, reservaEstaAtiva, salvarAgendamentos, salvarBloqueios, salvarConfiguracaoAgenda } from "@/lib/barber-storage";
+import AppointmentCard from "@/components/agenda/AppointmentCard";
+import ConfirmDialog from "@/components/agenda/ConfirmDialog";
 
-type Status = "Confirmado" | "Pendente" | "Cancelado";
+type Status = StatusAtendimento;
 
 type Agendamento = {
   id: number;
@@ -15,6 +17,7 @@ type Agendamento = {
   status: Status;
   whatsapp: string;
   duracaoMinutos?: number;
+  statusManual?: "Cancelado" | "Não compareceu";
 };
 
 type DiaFuncionamento = {
@@ -35,7 +38,12 @@ type ConfigAgenda = {
   diasParaAgendar: "7" | "15" | "30";
 };
 
+type Confirmacao =
+  | { tipo: "status"; status: "Cancelado" | "Não compareceu"; item: Agendamento }
+  | { tipo: "remover-bloqueio"; bloqueio: BloqueioAgenda };
+
 const dias = proximosDias(7);
+const idsDosDias = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
 
 const agendamentosIniciais: Agendamento[] = [];
 
@@ -133,8 +141,9 @@ function dinheiro(valor: number) {
 }
 
 function statusClass(status: Status) {
-  if (status === "Confirmado") return "bg-green-500/10 text-green-300";
-  if (status === "Pendente") return "bg-yellow-500/10 text-yellow-300";
+  if (status === "Concluído") return "bg-green-500/10 text-green-300";
+  if (status === "Em atendimento") return "bg-blue-500/10 text-blue-300";
+  if (status === "Agendado") return "bg-amber-400/10 text-amber-300";
   return "bg-red-500/10 text-red-300";
 }
 
@@ -154,9 +163,22 @@ export default function AgendaPage() {
     agendamentosIniciais
   );
 
-  const [modalNovoAberto, setModalNovoAberto] = useState(false);
   const [modalHorariosAberto, setModalHorariosAberto] = useState(false);
+  const [modalBloqueioAberto, setModalBloqueioAberto] = useState(false);
   const [diaExpandido, setDiaExpandido] = useState<string | null>(null);
+  const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
+  const [bloqueioData, setBloqueioData] = useState(dataLocal());
+  const [bloqueioDiaInteiro, setBloqueioDiaInteiro] = useState(false);
+  const [bloqueioInicio, setBloqueioInicio] = useState("");
+  const [bloqueioFim, setBloqueioFim] = useState("");
+  const [bloqueioMotivo, setBloqueioMotivo] = useState("");
+  const [conflitosBloqueio, setConflitosBloqueio] = useState<Agendamento[]>([]);
+  const [agendamentoRemarcar, setAgendamentoRemarcar] = useState<Agendamento | null>(null);
+  const [novaData, setNovaData] = useState(dataLocal());
+  const [novoHorario, setNovoHorario] = useState("");
+  const [agoraRemarcacao, setAgoraRemarcacao] = useState(0);
+  const [agendamentoEditarStatus, setAgendamentoEditarStatus] = useState<Agendamento | null>(null);
+  const [confirmacao, setConfirmacao] = useState<Confirmacao | null>(null);
 
   const [diasFuncionamento, setDiasFuncionamento] = useState<
     DiaFuncionamento[]
@@ -165,18 +187,15 @@ export default function AgendaPage() {
   const [configAgenda, setConfigAgenda] =
     useState<ConfigAgenda>(configAgendaInicial);
 
-  const [cliente, setCliente] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
-  const [servico, setServico] = useState("");
-  const [valor, setValor] = useState("");
-  const [data, setData] = useState(dataLocal());
-  const [hora, setHora] = useState("");
 
   useEffect(() => {
     function carregar() {
+      const agora = Date.now();
       setAgendamentos(
-        carregarAgendamentos().map((item) => ({ ...item, status: "Confirmado" }))
+        carregarAgendamentos().map((item) => ({ ...item, status: obterStatusAtendimento(item, agora) }))
       );
+      setBloqueios(carregarBloqueios());
+      setAgoraRemarcacao(agora);
       const configuracaoSalva = carregarConfiguracaoAgenda();
       if (configuracaoSalva) {
         setDiasFuncionamento(configuracaoSalva.diasFuncionamento);
@@ -184,36 +203,67 @@ export default function AgendaPage() {
       }
     }
     carregar();
+  }, []);
 
+  useEffect(() => {
+    const intervalo = window.setInterval(() => setAgoraRemarcacao(Date.now()), 60_000);
+    return () => window.clearInterval(intervalo);
+  }, []);
+
+  useEffect(() => {
     function fecharComEsc(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        fecharModalNovo();
         setModalHorariosAberto(false);
+        setModalBloqueioAberto(false);
+        setConflitosBloqueio([]);
+        setAgendamentoRemarcar(null);
+        setAgendamentoEditarStatus(null);
+        setConfirmacao(null);
       }
     }
-
-    if (modalNovoAberto || modalHorariosAberto) {
-      document.addEventListener("keydown", fecharComEsc);
-    }
+    document.addEventListener("keydown", fecharComEsc);
 
     return () => {
       document.removeEventListener("keydown", fecharComEsc);
     };
-  }, [modalNovoAberto, modalHorariosAberto]);
+  }, []);
 
   const agendamentosDoDia = useMemo(() => {
     return agendamentos
       .filter((item) => item.data === diaSelecionado)
+      .map((item) => ({ ...item, status: obterStatusAtendimento(item, agoraRemarcacao) }))
       .sort((a, b) => a.hora.localeCompare(b.hora));
-  }, [agendamentos, diaSelecionado]);
+  }, [agendamentos, diaSelecionado, agoraRemarcacao]);
 
-  const totalConfirmados = agendamentosDoDia.filter(
-    (a) => a.status === "Confirmado"
-  ).length;
+  const horariosRemarcacao = useMemo(() => {
+    if (!agendamentoRemarcar || !novaData) return [];
+    const dataEscolhida = new Date(`${novaData}T12:00:00`);
+    const expediente = diasFuncionamento.find((item) => item.id === idsDosDias[dataEscolhida.getDay()]);
+    if (!expediente?.ativo) return [];
+    const intervalo = Number(configAgenda.intervalo);
+    const duracao = agendamentoRemarcar.duracaoMinutos ?? intervalo;
+    const limiteMinimo = agoraRemarcacao + Number(configAgenda.antecedenciaMinima) * 60 * 60 * 1000;
+    const disponiveis: string[] = [];
+    for (let atual = minutos(expediente.abertura); atual < minutos(expediente.fechamento); atual += intervalo) {
+      const hora = `${String(Math.floor(atual / 60)).padStart(2, "0")}:${String(atual % 60).padStart(2, "0")}`;
+      const fim = atual + duracao;
+      const instante = new Date(`${novaData}T${hora}:00`).getTime();
+      const sobrepoePausa = expediente.temPausa && atual < minutos(expediente.pausaFim) && fim > minutos(expediente.pausaInicio);
+      const sobrepoeBloqueio = bloqueios.some((item) => item.data === novaData && atual < (item.diaInteiro ? 24 * 60 : minutos(item.fim)) && fim > (item.diaInteiro ? 0 : minutos(item.inicio)));
+      const sobrepoeReserva = agendamentos.some((item) => {
+        if (item.id === agendamentoRemarcar.id || item.data !== novaData || !reservaEstaAtiva(item, agoraRemarcacao)) return false;
+        const inicioExistente = minutos(item.hora);
+        const fimExistente = inicioExistente + (item.duracaoMinutos ?? intervalo);
+        return atual <= fimExistente && fim >= inicioExistente;
+      });
+      if (fim <= minutos(expediente.fechamento) && instante >= limiteMinimo && !sobrepoePausa && !sobrepoeBloqueio && !sobrepoeReserva) disponiveis.push(hora);
+    }
+    return disponiveis;
+  }, [agendamentoRemarcar, novaData, diasFuncionamento, configAgenda, agoraRemarcacao, bloqueios, agendamentos]);
 
-  const faturamento = agendamentosDoDia
-    .filter((a) => a.status !== "Cancelado")
-    .reduce((total, a) => total + a.valor, 0);
+  const reservasAtivasDoDia = agendamentosDoDia.filter((item) => reservaEstaAtiva(item, agoraRemarcacao));
+  const reservasEncerradasDoDia = agendamentosDoDia.filter((item) => !reservaEstaAtiva(item, agoraRemarcacao));
+  const totalReservasHoje = agendamentos.filter((item) => item.data === dataLocal()).length;
 
   const diasAtivos = diasFuncionamento.filter((dia) => dia.ativo);
 
@@ -221,62 +271,6 @@ export default function AgendaPage() {
     diasAtivos.length === 0
       ? "Nenhum dia ativo"
       : diasAtivos.map((dia) => dia.curto).join(", ");
-
-  function abrirModalNovo() {
-    setCliente("");
-    setWhatsapp("");
-    setServico("");
-    setValor("");
-    setData(diaSelecionado);
-    setHora("");
-    setModalNovoAberto(true);
-  }
-
-  function fecharModalNovo() {
-    setModalNovoAberto(false);
-    setCliente("");
-    setWhatsapp("");
-    setServico("");
-    setValor("");
-    setData(diaSelecionado);
-    setHora("");
-  }
-
-  function salvarNovoAgendamento() {
-    if (!cliente || !whatsapp || !servico || !valor || !data || !hora) {
-      alert("Preencha todos os campos.");
-      return;
-    }
-
-    const valorNumerico = Number(valor.replace(",", "."));
-
-    if (Number.isNaN(valorNumerico) || valorNumerico <= 0) {
-      alert("Informe um valor válido.");
-      return;
-    }
-
-    const novoAgendamento: Agendamento = {
-      id: Date.now(),
-      data,
-      hora,
-      cliente,
-      servico,
-      valor: valorNumerico,
-      status: "Confirmado",
-      whatsapp,
-    };
-
-    if (agendamentos.some((item) => item.data === data && item.hora === hora && item.status !== "Cancelado")) {
-      alert("Esse horário já está ocupado.");
-      return;
-    }
-
-    const novaLista = [novoAgendamento, ...agendamentos];
-    setAgendamentos(novaLista);
-    salvarAgendamentos(novaLista);
-    setDiaSelecionado(data);
-    fecharModalNovo();
-  }
 
   function atualizarDiaFuncionamento(
     id: string,
@@ -290,10 +284,85 @@ export default function AgendaPage() {
     );
   }
 
-  function cancelarAgendamento(id: number) {
-    const novaLista = agendamentos.filter((item) => item.id !== id);
+  function alterarStatusAtendimento(statusManual?: "Cancelado" | "Não compareceu", alvo = agendamentoEditarStatus) {
+    if (!alvo) return;
+    const novaLista = agendamentos.map((item) => item.id === alvo.id ? { ...item, statusManual, status: obterStatusAtendimento({ ...item, statusManual }, agoraRemarcacao) } : item);
     setAgendamentos(novaLista);
     salvarAgendamentos(novaLista);
+    setAgendamentoEditarStatus(null);
+  }
+
+  function abrirBloqueio() {
+    setBloqueioData(diaSelecionado);
+    setBloqueioDiaInteiro(false);
+    setBloqueioInicio("");
+    setBloqueioFim("");
+    setBloqueioMotivo("");
+    setModalBloqueioAberto(true);
+  }
+
+  function salvarBloqueio() {
+    if (!bloqueioData || !bloqueioMotivo.trim() || (!bloqueioDiaInteiro && (!bloqueioInicio || !bloqueioFim))) {
+      alert("Preencha a data, o período e o motivo.");
+      return;
+    }
+    const inicio = bloqueioDiaInteiro ? 0 : minutos(bloqueioInicio);
+    const fim = bloqueioDiaInteiro ? 24 * 60 : minutos(bloqueioFim);
+    if (fim <= inicio) { alert("O horário final precisa ser depois do inicial."); return; }
+
+    const conflitos = agendamentos.filter((item) => {
+      if (item.data !== bloqueioData || !reservaEstaAtiva(item, agoraRemarcacao)) return false;
+      const inicioReserva = minutos(item.hora);
+      const fimReserva = inicioReserva + (item.duracaoMinutos ?? Number(configAgenda.intervalo));
+      return inicio < fimReserva && fim > inicioReserva;
+    });
+    if (conflitos.length > 0) { setConflitosBloqueio(conflitos); return; }
+
+    const novo: BloqueioAgenda = { id: Date.now(), data: bloqueioData, diaInteiro: bloqueioDiaInteiro, inicio: bloqueioDiaInteiro ? "00:00" : bloqueioInicio, fim: bloqueioDiaInteiro ? "23:59" : bloqueioFim, motivo: bloqueioMotivo.trim() };
+    const novaLista = [...bloqueios, novo];
+    setBloqueios(novaLista);
+    salvarBloqueios(novaLista);
+    setDiaSelecionado(bloqueioData);
+    setModalBloqueioAberto(false);
+  }
+
+  function removerBloqueio(id: number) {
+    const novaLista = bloqueios.filter((item) => item.id !== id);
+    setBloqueios(novaLista);
+    salvarBloqueios(novaLista);
+  }
+
+  function executarConfirmacao() {
+    if (!confirmacao) return;
+    if (confirmacao.tipo === "remover-bloqueio") removerBloqueio(confirmacao.bloqueio.id);
+    else alterarStatusAtendimento(confirmacao.status, confirmacao.item);
+    setConfirmacao(null);
+  }
+
+  function abrirRemarcacao(item: Agendamento) {
+    setAgendamentoRemarcar(item);
+    setNovaData(item.data);
+    setNovoHorario("");
+  }
+
+  function perguntarSobreRemarcacao() {
+    if (!agendamentoRemarcar) return;
+    const dataAtual = agendamentoRemarcar.data.split("-").reverse().join("/");
+    const mensagem = encodeURIComponent(`Oi, ${agendamentoRemarcar.cliente}! Tudo bem? Vou precisar remarcar seu horário na PH10, que está marcado para ${dataAtual} às ${agendamentoRemarcar.hora}. Qual dia e horário ficam melhores para você? Se puder, me manda algumas opções que eu confiro aqui na agenda.`);
+    const numero = agendamentoRemarcar.whatsapp.replace(/\D/g, "");
+    const numeroCompleto = numero.startsWith("55") ? numero : `55${numero}`;
+    window.open(`https://wa.me/${numeroCompleto}?text=${mensagem}`, "_blank", "noopener,noreferrer");
+  }
+
+  function concluirRemarcacao() {
+    if (!agendamentoRemarcar || !novaData || !novoHorario) { alert("Escolha a nova data e o novo horário."); return; }
+    const anterior = agendamentoRemarcar;
+    const novaLista = agendamentos.map((item) => item.id === anterior.id ? { ...item, data: novaData, hora: novoHorario } : item);
+    setAgendamentos(novaLista);
+    salvarAgendamentos(novaLista);
+    setDiaSelecionado(novaData);
+    setAgendamentoRemarcar(null);
+
   }
 
   return (
@@ -315,35 +384,7 @@ export default function AgendaPage() {
           </div>
         </header>
 
-        <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-3xl bg-neutral-900 p-4">
-            <p className="text-xs text-neutral-400">Agendamentos</p>
-            <strong className="mt-2 block text-3xl">
-              {agendamentosDoDia.length}
-            </strong>
-          </div>
-
-          <div className="rounded-3xl bg-neutral-900 p-4">
-            <p className="text-xs text-neutral-400">Clientes</p>
-            <strong className="mt-2 block text-3xl text-yellow-300">
-              {new Set(agendamentosDoDia.map((item) => item.whatsapp)).size}
-            </strong>
-          </div>
-
-          <div className="rounded-3xl bg-neutral-900 p-4">
-            <p className="text-xs text-neutral-400">Agendados</p>
-            <strong className="mt-2 block text-3xl text-green-300">
-              {totalConfirmados}
-            </strong>
-          </div>
-
-          <div className="rounded-3xl bg-amber-400 p-4 text-neutral-950">
-            <p className="text-xs font-bold">Previsto</p>
-            <strong className="mt-2 block text-2xl">
-              {dinheiro(faturamento)}
-            </strong>
-          </div>
-        </section>
+        <div className="mt-5 flex items-center gap-2 border-b border-white/10 pb-4 text-sm text-neutral-400"><span className="h-2 w-2 rounded-full bg-amber-400" /><span>Total de reservas para hoje:</span><strong className="text-white">{totalReservasHoje}</strong></div>
 
         <section className="mt-5 rounded-[2rem] bg-neutral-900 p-5">
           <div className="flex items-start justify-between gap-4">
@@ -354,16 +395,10 @@ export default function AgendaPage() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setDiaExpandido(null);
-                setModalHorariosAberto(true);
-              }}
-              className="rounded-2xl bg-amber-400 px-4 py-3 text-xs font-black text-neutral-950"
-            >
-              Configurar
-            </button>
+            <div className="flex shrink-0 flex-col gap-2">
+              <button type="button" onClick={() => { setDiaExpandido(null); setModalHorariosAberto(true); }} className="rounded-2xl bg-amber-400 px-4 py-3 text-xs font-black text-neutral-950">Configurar</button>
+              <button type="button" onClick={abrirBloqueio} className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-xs font-black text-amber-300">Bloquear período</button>
+            </div>
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -389,9 +424,11 @@ export default function AgendaPage() {
 
           <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2 lg:mx-0 lg:px-0">
             {dias.map((dia) => {
-              const lista = agendamentos.filter((a) => a.data === dia.data);
+              const lista = agendamentos
+                .filter((a) => a.data === dia.data)
+                .map((a) => ({ ...a, status: obterStatusAtendimento(a, agoraRemarcacao) }));
               const previsto = lista
-                .filter((a) => a.status !== "Cancelado")
+                .filter((a) => a.status !== "Cancelado" && a.status !== "Não compareceu")
                 .reduce((total, a) => total + a.valor, 0);
 
               const ativo = dia.data === diaSelecionado;
@@ -422,162 +459,73 @@ export default function AgendaPage() {
         </section>
 
         <section className="mt-5 space-y-3">
-          {agendamentosDoDia.length === 0 ? (
+          <div className="pb-1"><p className="text-xs font-black uppercase tracking-[.18em] text-amber-400">Agenda do dia</p><h2 className="mt-1 text-xl font-black">Próximos atendimentos</h2></div>
+          {bloqueios.filter((item) => item.data === diaSelecionado).map((bloqueio) => (
+            <article key={bloqueio.id} className="rounded-[1.75rem] border border-amber-400/20 bg-amber-400/5 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div><p className="text-xs font-black uppercase tracking-wider text-amber-400">Horário bloqueado</p><h3 className="mt-1 font-black">{bloqueio.motivo}</h3><p className="mt-1 text-sm text-neutral-400">{bloqueio.diaInteiro ? "Dia inteiro" : `${bloqueio.inicio} às ${bloqueio.fim}`}</p></div>
+                <button type="button" onClick={() => setConfirmacao({ tipo: "remover-bloqueio", bloqueio })} className="rounded-2xl bg-red-500/10 px-3 py-3 text-xs font-black text-red-300">Remover</button>
+              </div>
+            </article>
+          ))}
+          {reservasAtivasDoDia.length === 0 ? (
             <div className="rounded-[1.75rem] border border-dashed border-white/10 bg-neutral-900 p-6 text-center">
-              <p className="text-lg font-black">Agenda vazia</p>
+              <p className="text-lg font-black">{agendamentosDoDia.length > 0 ? "Atendimentos do dia encerrados" : "Agenda vazia"}</p>
               <p className="mt-2 text-sm text-neutral-400">
-                Nenhum cliente marcado para esse dia.
+                {agendamentosDoDia.length > 0 ? "Não há reservas para as próximas horas." : "Nenhum cliente marcado para esse dia."}
               </p>
             </div>
           ) : (
-            agendamentosDoDia.map((item) => (
-              <article
-                key={item.id}
-                className="rounded-[1.75rem] bg-neutral-900 p-4"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-black text-amber-400">
-                      {item.hora}
-                    </p>
-                    <h3 className="mt-1 text-lg font-black">{item.cliente}</h3>
-                    <p className="text-sm text-neutral-400">{item.servico}</p>
-                  </div>
-
-                  <div className="text-right">
-                    <p className="font-black">{dinheiro(item.valor)}</p>
-                    <span
-                      className={`mt-2 inline-flex rounded-full px-3 py-1 text-[11px] font-black ${statusClass(
-                        item.status
-                      )}`}
-                    >
-                      Agendado
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-3">
-                  <a
-                    href={whatsappLink(item)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-2xl bg-green-500 px-3 py-3 text-center text-xs font-black text-white"
-                  >
-                    WhatsApp
-                  </a>
-
-                  <button
-                    type="button"
-                    className="rounded-2xl bg-white/10 px-3 py-3 text-xs font-black"
-                  >
-                    Remarcar
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => cancelarAgendamento(item.id)}
-                    className="rounded-2xl bg-red-500/10 px-3 py-3 text-xs font-black text-red-300"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </article>
-            ))
+            reservasAtivasDoDia.map((item) => <AppointmentCard key={item.id} item={item} ativo={reservaEstaAtiva(item, agoraRemarcacao)} whatsappHref={whatsappLink(item)} onRemarcar={abrirRemarcacao} onEditarStatus={setAgendamentoEditarStatus} />)
           )}
         </section>
+
+        {reservasEncerradasDoDia.length > 0 && <section className="mt-8 border-t border-white/10 pt-6"><div className="mb-3"><p className="text-xs font-black uppercase tracking-[.18em] text-neutral-500">Encerrados</p><h2 className="mt-1 text-xl font-black text-neutral-300">Atendimentos encerrados</h2></div><div className="space-y-3">{reservasEncerradasDoDia.map((item) => <AppointmentCard key={item.id} item={item} ativo={false} encerrado whatsappHref={whatsappLink(item)} onRemarcar={abrirRemarcacao} onEditarStatus={setAgendamentoEditarStatus} />)}</div></section>}
       </div>
 
-      {modalNovoAberto && (
-        <div
-          onClick={fecharModalNovo}
-          className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 p-4 lg:items-center"
-        >
-          <div
-            onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-black">Novo agendamento</h2>
-                <p className="mt-1 text-sm text-neutral-400">
-                  Cadastro manual feito pelo Pedro.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={fecharModalNovo}
-                className="rounded-full bg-white/10 px-3 py-2 text-sm font-black"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mt-5 space-y-3">
-              <input
-                value={cliente}
-                onChange={(event) => setCliente(event.target.value)}
-                placeholder="Nome do cliente"
-                className="w-full rounded-2xl bg-neutral-950 px-4 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
-              />
-
-              <input
-                value={whatsapp}
-                onChange={(event) => setWhatsapp(event.target.value)}
-                placeholder="WhatsApp"
-                className="w-full rounded-2xl bg-neutral-950 px-4 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
-              />
-
-              <input
-                value={servico}
-                onChange={(event) => setServico(event.target.value)}
-                placeholder="Serviço. Ex: Corte"
-                className="w-full rounded-2xl bg-neutral-950 px-4 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
-              />
-
-              <input
-                value={valor}
-                onChange={(event) => setValor(event.target.value)}
-                placeholder="Valor. Ex: 40"
-                inputMode="decimal"
-                className="w-full rounded-2xl bg-neutral-950 px-4 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
-              />
-
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="date"
-                  value={data}
-                  onChange={(event) => setData(event.target.value)}
-                  className="w-full rounded-2xl bg-neutral-950 px-4 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
-                />
-
-                <input
-                  type="time"
-                  value={hora}
-                  onChange={(event) => setHora(event.target.value)}
-                  className="w-full rounded-2xl bg-neutral-950 px-4 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
-                />
-              </div>
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={fecharModalNovo}
-                className="rounded-2xl bg-white/10 px-4 py-4 text-sm font-black"
-              >
-                Cancelar
-              </button>
-
-              <button
-                type="button"
-                onClick={salvarNovoAgendamento}
-                className="rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950"
-              >
-                Salvar
-              </button>
-            </div>
+      {agendamentoEditarStatus && (
+        <div onClick={() => setAgendamentoEditarStatus(null)} className="fixed inset-0 z-[240] flex items-center justify-center bg-black/75 p-4">
+          <div onClick={(event) => event.stopPropagation()} className="w-full max-w-sm rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4"><div><h2 className="text-2xl font-black">Editar status</h2><p className="mt-1 text-sm text-neutral-400">{agendamentoEditarStatus.cliente} • {agendamentoEditarStatus.hora}</p></div><button type="button" onClick={() => setAgendamentoEditarStatus(null)} className="rounded-full bg-white/10 px-3 py-2 font-black">×</button></div>
+            <p className="mt-5 text-xs font-bold uppercase tracking-wider text-neutral-500">Status atual</p><div className={`mt-2 inline-flex rounded-full px-3 py-2 text-xs font-black ${statusClass(obterStatusAtendimento(agendamentoEditarStatus, agoraRemarcacao))}`}>{obterStatusAtendimento(agendamentoEditarStatus, agoraRemarcacao)}</div>
+            <div className="mt-5 space-y-2"><button type="button" onClick={() => alterarStatusAtendimento(undefined)} className="w-full rounded-2xl bg-white/10 p-4 text-left"><p className="font-black">Usar status automático</p><p className="mt-1 text-xs text-neutral-400">O sistema calcula pelo horário do atendimento.</p></button><button type="button" onClick={() => setConfirmacao({ tipo: "status", status: "Não compareceu", item: agendamentoEditarStatus })} className="w-full rounded-2xl bg-red-500/10 p-4 text-left text-red-200"><p className="font-black">Cliente não compareceu</p><p className="mt-1 text-xs opacity-70">Mantém a reserva no histórico.</p></button><button type="button" onClick={() => setConfirmacao({ tipo: "status", status: "Cancelado", item: agendamentoEditarStatus })} className="w-full rounded-2xl bg-red-500/10 p-4 text-left text-red-200"><p className="font-black">Atendimento cancelado</p><p className="mt-1 text-xs opacity-70">Libera o horário e preserva o registro.</p></button></div>
           </div>
+        </div>
+      )}
+
+      {agendamentoRemarcar && (
+        <div onClick={() => setAgendamentoRemarcar(null)} className="fixed inset-0 z-[220] flex items-center justify-center bg-black/75 p-4">
+          <div onClick={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4"><div><h2 className="text-2xl font-black">Remarcar horário</h2><p className="mt-1 text-sm text-neutral-400">{agendamentoRemarcar.cliente} • {agendamentoRemarcar.servico}</p></div><button type="button" onClick={() => setAgendamentoRemarcar(null)} className="rounded-full bg-white/10 px-3 py-2 font-black">×</button></div>
+            <div className="mt-5 rounded-2xl bg-neutral-950 p-4"><p className="text-xs font-bold uppercase tracking-wider text-neutral-500">Horário atual</p><p className="mt-2 font-black">{agendamentoRemarcar.data.split("-").reverse().join("/")} às {agendamentoRemarcar.hora}</p></div>
+            <div className="mt-4 rounded-2xl border border-green-500/20 bg-green-500/5 p-4"><p className="text-sm font-black">1. Consulte o cliente primeiro</p><p className="mt-1 text-xs leading-relaxed text-neutral-400">A reserva atual permanece intacta enquanto vocês combinam uma nova opção.</p><button type="button" onClick={perguntarSobreRemarcacao} className="mt-3 w-full rounded-2xl bg-green-500 px-4 py-3 text-sm font-black text-white">Perguntar pelo WhatsApp</button></div>
+            <div className="mt-5 border-t border-white/10 pt-5"><p className="text-sm font-black">2. Remarque após a resposta</p><p className="mt-1 text-xs text-neutral-400">Como é uma ação do dono, você pode escolher qualquer data futura.</p></div>
+            <label className="mt-4 block"><span className="text-xs font-bold text-neutral-400">Nova data</span><input type="date" min={dataLocal()} value={novaData} onChange={(event) => { setNovaData(event.target.value); setNovoHorario(""); }} className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 outline-none focus:ring-2 focus:ring-amber-400" /></label>
+            <div className="mt-5"><p className="text-xs font-bold text-neutral-400">Horários disponíveis</p>{horariosRemarcacao.length === 0 ? <p className="mt-3 rounded-2xl bg-neutral-950 p-4 text-center text-sm text-neutral-500">Nenhum horário disponível nessa data.</p> : <div className="mt-3 grid grid-cols-3 gap-2">{horariosRemarcacao.map((hora) => <button key={hora} type="button" onClick={() => setNovoHorario(hora)} className={`rounded-2xl border py-3 text-sm font-black ${novoHorario === hora ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-white/10 bg-neutral-950"}`}>{hora}</button>)}</div>}</div>
+            <p className="mt-4 text-xs leading-relaxed text-neutral-400">A reserva só será alterada quando você confirmar abaixo.</p>
+            <div className="mt-5 grid grid-cols-2 gap-3"><button type="button" onClick={() => setAgendamentoRemarcar(null)} className="rounded-2xl bg-white/10 px-4 py-4 text-sm font-black">Cancelar</button><button type="button" onClick={concluirRemarcacao} className="rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950">Confirmar remarcação</button></div>
+          </div>
+        </div>
+      )}
+
+      {modalBloqueioAberto && (
+        <div onClick={() => setModalBloqueioAberto(false)} className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 p-4">
+          <div onClick={(event) => event.stopPropagation()} className="w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4"><div><h2 className="text-2xl font-black">Bloquear período</h2><p className="mt-1 text-sm text-neutral-400">O período deixará de aparecer para os clientes.</p></div><button type="button" onClick={() => setModalBloqueioAberto(false)} className="rounded-full bg-white/10 px-3 py-2 text-sm font-black">×</button></div>
+            <div className="mt-5 space-y-3">
+              <label className="block"><span className="text-xs font-bold text-neutral-400">Data</span><input type="date" value={bloqueioData} onChange={(event) => setBloqueioData(event.target.value)} className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 outline-none focus:ring-2 focus:ring-amber-400" /></label>
+              <button type="button" onClick={() => setBloqueioDiaInteiro((atual) => !atual)} className={`flex w-full items-center justify-between rounded-2xl border p-4 text-left ${bloqueioDiaInteiro ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-white/10 bg-neutral-950"}`}><span className="font-black">Bloquear o dia inteiro</span><span>{bloqueioDiaInteiro ? "✓" : ""}</span></button>
+              {!bloqueioDiaInteiro && <div className="grid grid-cols-2 gap-3"><label><span className="text-xs font-bold text-neutral-400">Início</span><input type="time" value={bloqueioInicio} onChange={(event) => setBloqueioInicio(event.target.value)} className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 outline-none focus:ring-2 focus:ring-amber-400" /></label><label><span className="text-xs font-bold text-neutral-400">Fim</span><input type="time" value={bloqueioFim} onChange={(event) => setBloqueioFim(event.target.value)} className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 outline-none focus:ring-2 focus:ring-amber-400" /></label></div>}
+              <label className="block"><span className="text-xs font-bold text-neutral-400">Motivo</span><input value={bloqueioMotivo} onChange={(event) => setBloqueioMotivo(event.target.value)} placeholder="Ex: Consulta médica" className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 outline-none focus:ring-2 focus:ring-amber-400" /></label>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3"><button type="button" onClick={() => setModalBloqueioAberto(false)} className="rounded-2xl bg-white/10 px-4 py-4 text-sm font-black">Cancelar</button><button type="button" onClick={salvarBloqueio} className="rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950">Criar bloqueio</button></div>
+          </div>
+        </div>
+      )}
+
+      {conflitosBloqueio.length > 0 && (
+        <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/75 p-4">
+          <div className="w-full max-w-sm rounded-[2rem] bg-neutral-900 p-6 text-center text-white shadow-2xl"><div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-red-500/10 text-2xl">!</div><h2 className="mt-4 text-2xl font-black">Há clientes nesse período</h2><p className="mt-2 text-sm text-neutral-400">Cancele as reservas abaixo antes de bloquear o horário.</p><div className="mt-4 space-y-2 text-left">{conflitosBloqueio.map((item) => <div key={item.id} className="rounded-2xl bg-neutral-950 p-3"><p className="font-black">{item.hora} • {item.cliente}</p><p className="mt-1 text-xs text-neutral-400">{item.servico}</p></div>)}</div><button type="button" onClick={() => { setConflitosBloqueio([]); setModalBloqueioAberto(false); setDiaSelecionado(bloqueioData); }} className="mt-5 w-full rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950">Ir para a agenda</button></div>
         </div>
       )}
 
@@ -862,6 +810,15 @@ export default function AgendaPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        aberto={Boolean(confirmacao)}
+        titulo={confirmacao?.tipo === "remover-bloqueio" ? "Remover bloqueio?" : confirmacao?.status === "Cancelado" ? "Cancelar atendimento?" : "Marcar como falta?"}
+        descricao={confirmacao?.tipo === "remover-bloqueio" ? `O período de ${confirmacao.bloqueio.inicio} às ${confirmacao.bloqueio.fim} voltará a ficar disponível para reservas.` : confirmacao?.status === "Cancelado" ? "O horário será liberado, mas o atendimento continuará registrado no histórico." : "O atendimento será encerrado como não compareceu e permanecerá no histórico."}
+        confirmarTexto={confirmacao?.tipo === "remover-bloqueio" ? "Remover" : "Confirmar"}
+        onConfirmar={executarConfirmacao}
+        onFechar={() => setConfirmacao(null)}
+      />
     </main>
   );
 }
+function minutos(hora: string) { const [h, m] = hora.split(":").map(Number); return h * 60 + m; }

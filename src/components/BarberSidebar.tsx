@@ -7,6 +7,7 @@ import { useState } from "react";
 const menu = [
   { nome: "Início", href: "/inicio", icon: "⌂" },
   { nome: "Agenda", href: "/inicio/agenda", icon: "◷" },
+  { nome: "Histórico", href: "/inicio/historico", icon: "◴" },
   { nome: "Clientes", href: "/inicio/clientes", icon: "◉" },
   { nome: "Serviços", href: "/inicio/servicos", icon: "✦" },
 ];

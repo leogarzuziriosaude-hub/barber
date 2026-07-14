@@ -3,14 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Agendamento,
+  BloqueioAgenda,
   Combo,
   ConfiguracaoAgenda,
   Servico,
   carregarAgendamentos,
+  carregarBloqueios,
   carregarCombos,
   carregarConfiguracaoAgenda,
   carregarServicos,
   proximosDias,
+  reservaEstaAtiva,
   salvarAgendamentos,
 } from "@/lib/barber-storage";
 
@@ -38,6 +41,7 @@ export default function PaginaCliente() {
   const [nome, setNome] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+  const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [combos, setCombos] = useState<Combo[]>([]);
   const [configuracao, setConfiguracao] = useState<ConfiguracaoAgenda | null>(null);
@@ -48,6 +52,7 @@ export default function PaginaCliente() {
   useEffect(() => {
     function carregar() {
       setAgendamentos(carregarAgendamentos());
+      setBloqueios(carregarBloqueios());
       const servicosAtivos = carregarServicos().filter((item) => item.status === "Ativo");
       const combosAtivos = carregarCombos().filter((item) => item.status === "Ativo");
       setServicos(servicosAtivos);
@@ -79,15 +84,16 @@ export default function PaginaCliente() {
       const instante = new Date(`${dia}T${hora}:00`).getTime();
       const fimDoServico = atual + duracaoSelecionada;
       const sobrepoePausa = expediente.temPausa && atual < minutos(expediente.pausaFim) && fimDoServico > minutos(expediente.pausaInicio);
+      const sobrepoeBloqueio = bloqueios.some((bloqueio) => bloqueio.data === dia && atual < (bloqueio.diaInteiro ? 24 * 60 : minutos(bloqueio.fim)) && fimDoServico > (bloqueio.diaInteiro ? 0 : minutos(bloqueio.inicio)));
       const terminaNoExpediente = fimDoServico <= minutos(expediente.fechamento);
-      if (!sobrepoePausa && terminaNoExpediente && instante >= limiteMinimo) lista.push(hora);
+      if (!sobrepoePausa && !sobrepoeBloqueio && terminaNoExpediente && instante >= limiteMinimo) lista.push(hora);
     }
     return lista;
-  }, [configuracao, dia, agora, duracaoSelecionada]);
+  }, [configuracao, dia, agora, duracaoSelecionada, bloqueios]);
   const horariosOcupados = useMemo(
     () => {
       const intervaloPadrao = Number(configuracao?.configAgenda.intervalo ?? 30);
-      const reservasDoDia = agendamentos.filter((item) => item.data === dia);
+      const reservasDoDia = agendamentos.filter((item) => item.data === dia && reservaEstaAtiva(item, agora));
       return new Set(horarios.filter((hora) => {
         const inicioPretendido = minutos(hora);
         const fimPretendido = inicioPretendido + duracaoSelecionada;
@@ -98,7 +104,7 @@ export default function PaginaCliente() {
         });
       }));
     },
-    [agendamentos, configuracao, dia, duracaoSelecionada, horarios]
+    [agendamentos, configuracao, dia, duracaoSelecionada, horarios, agora]
   );
 
   function selecionarDia(novoDia: string) {
@@ -121,10 +127,24 @@ export default function PaginaCliente() {
     }
 
     const listaAtual = carregarAgendamentos();
+    const numeroCompletoCliente = `5521${whatsapp}`;
+    const reservaExistente = listaAtual.find((item) => item.whatsapp.replace(/\D/g, "").endsWith(whatsapp) && reservaEstaAtiva(item, agora));
+    if (reservaExistente) {
+      alert(`Você já possui uma reserva em ${reservaExistente.data.split("-").reverse().join("/")} às ${reservaExistente.hora}. Para remarcar, entre em contato com a PH10.`);
+      return;
+    }
+    const inicioPretendidoBloqueio = minutos(horario);
+    const bloqueioAtual = carregarBloqueios().some((bloqueio) => bloqueio.data === dia && inicioPretendidoBloqueio < (bloqueio.diaInteiro ? 24 * 60 : minutos(bloqueio.fim)) && inicioPretendidoBloqueio + duracaoSelecionada > (bloqueio.diaInteiro ? 0 : minutos(bloqueio.inicio)));
+    if (bloqueioAtual) {
+      setBloqueios(carregarBloqueios());
+      setHorario("");
+      alert("Esse período não está mais disponível. Escolha outro horário.");
+      return;
+    }
     const inicioPretendido = minutos(horario);
     const intervaloPadrao = Number(configuracao?.configAgenda.intervalo ?? 30);
     const existeConflito = listaAtual.some((item) => {
-      if (item.data !== dia) return false;
+      if (item.data !== dia || !reservaEstaAtiva(item, agora)) return false;
       const inicioReserva = minutos(item.hora);
       const fimReserva = inicioReserva + (item.duracaoMinutos ?? intervaloPadrao);
       return inicioPretendido <= fimReserva && inicioPretendido + duracaoSelecionada >= inicioReserva;
@@ -138,7 +158,7 @@ export default function PaginaCliente() {
 
     const novo: Agendamento = {
       id: Date.now(), data: dia, hora: horario, cliente: nome.trim(),
-      servico: servico.nome, valor: servico.valor, whatsapp: `5521${whatsapp}`, duracaoMinutos: duracaoSelecionada,
+      servico: servico.nome, valor: servico.valor, whatsapp: numeroCompletoCliente, duracaoMinutos: duracaoSelecionada,
     };
     const novaLista = [...listaAtual, novo];
     salvarAgendamentos(novaLista);

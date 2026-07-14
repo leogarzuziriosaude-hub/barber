@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Agendamento, carregarAgendamentos, dataLocal } from "@/lib/barber-storage";
+import { Agendamento, carregarAgendamentos, dataLocal, reservaEstaAtiva } from "@/lib/barber-storage";
 
 function dinheiro(valor: number) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -16,9 +16,10 @@ function saudacao() {
 
 export default function InicioPage() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+  const [agora, setAgora] = useState(0);
 
   useEffect(() => {
-    function carregar() { setAgendamentos(carregarAgendamentos()); }
+    function carregar() { setAgendamentos(carregarAgendamentos()); setAgora(Date.now()); }
     carregar();
     window.addEventListener("storage", carregar);
     window.addEventListener("ph10:agendamentos-atualizados", carregar);
@@ -30,10 +31,10 @@ export default function InicioPage() {
 
   const hoje = dataLocal();
   const proximos = useMemo(() => agendamentos
-    .filter((item) => item.data >= hoje)
+    .filter((item) => item.data >= hoje && reservaEstaAtiva(item, agora))
     .sort((a, b) => `${a.data} ${a.hora}`.localeCompare(`${b.data} ${b.hora}`))
-    .slice(0, 5), [agendamentos, hoje]);
-  const faturamento = agendamentos.reduce((total, item) => total + item.valor, 0);
+    .slice(0, 5), [agendamentos, hoje, agora]);
+  const faturamento = agendamentos.filter((item) => !item.statusManual).reduce((total, item) => total + item.valor, 0);
   const clientes = new Set(agendamentos.map((item) => item.whatsapp)).size;
 
   return (
