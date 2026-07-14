@@ -265,13 +265,6 @@ export default function AgendaPage() {
   const reservasEncerradasDoDia = agendamentosDoDia.filter((item) => !reservaEstaAtiva(item, agoraRemarcacao));
   const totalReservasHoje = agendamentos.filter((item) => item.data === dataLocal()).length;
 
-  const diasAtivos = diasFuncionamento.filter((dia) => dia.ativo);
-
-  const resumoDiasAtivos =
-    diasAtivos.length === 0
-      ? "Nenhum dia ativo"
-      : diasAtivos.map((dia) => dia.curto).join(", ");
-
   function atualizarDiaFuncionamento(
     id: string,
     campo: keyof DiaFuncionamento,
@@ -373,7 +366,7 @@ export default function AgendaPage() {
             PH10
           </p>
 
-          <div className="mt-3 flex items-start justify-between gap-4">
+          <div className="mt-3 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-3xl font-black">Agenda</h1>
               <p className="mt-1 text-sm text-neutral-400">
@@ -381,43 +374,29 @@ export default function AgendaPage() {
               </p>
             </div>
 
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setDiaExpandido(null);
+                  setModalHorariosAberto(true);
+                }}
+                className="rounded-2xl bg-amber-400 px-4 py-3 text-xs font-black text-neutral-950"
+              >
+                Configurar
+              </button>
+              <button
+                type="button"
+                onClick={abrirBloqueio}
+                className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-xs font-black text-amber-300"
+              >
+                Bloquear período
+              </button>
+            </div>
           </div>
         </header>
 
         <div className="mt-5 flex items-center gap-2 border-b border-white/10 pb-4 text-sm text-neutral-400"><span className="h-2 w-2 rounded-full bg-amber-400" /><span>Total de reservas para hoje:</span><strong className="text-white">{totalReservasHoje}</strong></div>
-
-        <section className="mt-5 rounded-[2rem] bg-neutral-900 p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-black">Horários de funcionamento</h2>
-              <p className="mt-1 text-sm text-neutral-400">
-                Define os dias e horários disponíveis para o cliente agendar.
-              </p>
-            </div>
-
-            <div className="flex shrink-0 flex-col gap-2">
-              <button type="button" onClick={() => { setDiaExpandido(null); setModalHorariosAberto(true); }} className="rounded-2xl bg-amber-400 px-4 py-3 text-xs font-black text-neutral-950">Configurar</button>
-              <button type="button" onClick={abrirBloqueio} className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-xs font-black text-amber-300">Bloquear período</button>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            <div className="rounded-2xl bg-neutral-950 p-4">
-              <p className="text-xs text-neutral-400">Dias ativos</p>
-              <p className="mt-1 text-sm font-black text-white">
-                {resumoDiasAtivos}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-neutral-950 p-4">
-              <p className="text-xs text-neutral-400">Intervalo</p>
-              <p className="mt-1 text-sm font-black text-white">
-                A cada {configAgenda.intervalo} min
-              </p>
-            </div>
-
-          </div>
-        </section>
 
         <section className="mt-6">
           <h2 className="text-xl font-black">Dias</h2>
