@@ -34,7 +34,19 @@ body {
 }
 
 button, a { -webkit-tap-highlight-color: transparent; }
-button { cursor: pointer; }
+:where(button, a, [role="button"]) {
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease !important;
+  transform-origin: center;
+}
+:where(button:not(:disabled), a, [role="button"]):active {
+  transform: scale(.94) !important;
+  filter: brightness(.92);
+}
+button:disabled { cursor: not-allowed; }
+input[autocomplete="name"]:focus {
+  box-shadow: 0 0 0 2px #fbbf24;
+}
 
 ::selection { background: var(--sand); color: var(--ink); }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { carregarAgendamentos, carregarConfiguracaoAgenda, dataLocal, proximosDias, salvarAgendamentos, salvarConfiguracaoAgenda } from "@/lib/barber-storage";
 
 type Status = "Confirmado" | "Pendente" | "Cancelado";
 
@@ -13,6 +14,7 @@ type Agendamento = {
   valor: number;
   status: Status;
   whatsapp: string;
+  duracaoMinutos?: number;
 };
 
 type DiaFuncionamento = {
@@ -33,15 +35,7 @@ type ConfigAgenda = {
   diasParaAgendar: "7" | "15" | "30";
 };
 
-const dias = [
-  { data: "2026-06-21", semana: "Dom", dia: "21" },
-  { data: "2026-06-22", semana: "Seg", dia: "22" },
-  { data: "2026-06-23", semana: "Ter", dia: "23" },
-  { data: "2026-06-24", semana: "Qua", dia: "24" },
-  { data: "2026-06-25", semana: "Qui", dia: "25" },
-  { data: "2026-06-26", semana: "Sex", dia: "26" },
-  { data: "2026-06-27", semana: "Sáb", dia: "27" },
-];
+const dias = proximosDias(7);
 
 const agendamentosIniciais: Agendamento[] = [];
 
@@ -149,17 +143,20 @@ function whatsappLink(item: Agendamento) {
     `Olá, ${item.cliente}! Seu horário na PH10 está confirmado para ${item.hora}, serviço: ${item.servico}.`
   );
 
-  return `https://wa.me/55${item.whatsapp}?text=${msg}`;
+  const numero = item.whatsapp.replace(/\D/g, "");
+  const numeroCompleto = numero.startsWith("55") ? numero : `55${numero}`;
+  return `https://wa.me/${numeroCompleto}?text=${msg}`;
 }
 
 export default function AgendaPage() {
-  const [diaSelecionado, setDiaSelecionado] = useState("2026-06-21");
+  const [diaSelecionado, setDiaSelecionado] = useState(dataLocal());
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>(
     agendamentosIniciais
   );
 
   const [modalNovoAberto, setModalNovoAberto] = useState(false);
   const [modalHorariosAberto, setModalHorariosAberto] = useState(false);
+  const [diaExpandido, setDiaExpandido] = useState<string | null>(null);
 
   const [diasFuncionamento, setDiasFuncionamento] = useState<
     DiaFuncionamento[]
@@ -172,10 +169,22 @@ export default function AgendaPage() {
   const [whatsapp, setWhatsapp] = useState("");
   const [servico, setServico] = useState("");
   const [valor, setValor] = useState("");
-  const [data, setData] = useState("2026-06-21");
+  const [data, setData] = useState(dataLocal());
   const [hora, setHora] = useState("");
 
   useEffect(() => {
+    function carregar() {
+      setAgendamentos(
+        carregarAgendamentos().map((item) => ({ ...item, status: "Confirmado" }))
+      );
+      const configuracaoSalva = carregarConfiguracaoAgenda();
+      if (configuracaoSalva) {
+        setDiasFuncionamento(configuracaoSalva.diasFuncionamento);
+        setConfigAgenda(configuracaoSalva.configAgenda);
+      }
+    }
+    carregar();
+
     function fecharComEsc(event: KeyboardEvent) {
       if (event.key === "Escape") {
         fecharModalNovo();
@@ -198,10 +207,6 @@ export default function AgendaPage() {
       .sort((a, b) => a.hora.localeCompare(b.hora));
   }, [agendamentos, diaSelecionado]);
 
-  const totalPendentes = agendamentosDoDia.filter(
-    (a) => a.status === "Pendente"
-  ).length;
-
   const totalConfirmados = agendamentosDoDia.filter(
     (a) => a.status === "Confirmado"
   ).length;
@@ -211,10 +216,6 @@ export default function AgendaPage() {
     .reduce((total, a) => total + a.valor, 0);
 
   const diasAtivos = diasFuncionamento.filter((dia) => dia.ativo);
-
-  const diasComPausa = diasFuncionamento.filter(
-    (dia) => dia.ativo && dia.temPausa
-  ).length;
 
   const resumoDiasAtivos =
     diasAtivos.length === 0
@@ -261,11 +262,18 @@ export default function AgendaPage() {
       cliente,
       servico,
       valor: valorNumerico,
-      status: "Pendente",
+      status: "Confirmado",
       whatsapp,
     };
 
-    setAgendamentos((listaAtual) => [novoAgendamento, ...listaAtual]);
+    if (agendamentos.some((item) => item.data === data && item.hora === hora && item.status !== "Cancelado")) {
+      alert("Esse horário já está ocupado.");
+      return;
+    }
+
+    const novaLista = [novoAgendamento, ...agendamentos];
+    setAgendamentos(novaLista);
+    salvarAgendamentos(novaLista);
     setDiaSelecionado(data);
     fecharModalNovo();
   }
@@ -282,20 +290,10 @@ export default function AgendaPage() {
     );
   }
 
-  function confirmarAgendamento(id: number) {
-    setAgendamentos((listaAtual) =>
-      listaAtual.map((item) =>
-        item.id === id ? { ...item, status: "Confirmado" } : item
-      )
-    );
-  }
-
   function cancelarAgendamento(id: number) {
-    setAgendamentos((listaAtual) =>
-      listaAtual.map((item) =>
-        item.id === id ? { ...item, status: "Cancelado" } : item
-      )
-    );
+    const novaLista = agendamentos.filter((item) => item.id !== id);
+    setAgendamentos(novaLista);
+    salvarAgendamentos(novaLista);
   }
 
   return (
@@ -314,23 +312,6 @@ export default function AgendaPage() {
               </p>
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => setModalHorariosAberto(true)}
-                className="rounded-2xl bg-white/10 px-4 py-3 text-xs font-black text-white"
-              >
-                Horários
-              </button>
-
-              <button
-                type="button"
-                onClick={abrirModalNovo}
-                className="rounded-2xl bg-amber-400 px-4 py-3 text-xs font-black text-neutral-950"
-              >
-                + Novo
-              </button>
-            </div>
           </div>
         </header>
 
@@ -343,14 +324,14 @@ export default function AgendaPage() {
           </div>
 
           <div className="rounded-3xl bg-neutral-900 p-4">
-            <p className="text-xs text-neutral-400">Pendentes</p>
+            <p className="text-xs text-neutral-400">Clientes</p>
             <strong className="mt-2 block text-3xl text-yellow-300">
-              {totalPendentes}
+              {new Set(agendamentosDoDia.map((item) => item.whatsapp)).size}
             </strong>
           </div>
 
           <div className="rounded-3xl bg-neutral-900 p-4">
-            <p className="text-xs text-neutral-400">Confirmados</p>
+            <p className="text-xs text-neutral-400">Agendados</p>
             <strong className="mt-2 block text-3xl text-green-300">
               {totalConfirmados}
             </strong>
@@ -375,14 +356,17 @@ export default function AgendaPage() {
 
             <button
               type="button"
-              onClick={() => setModalHorariosAberto(true)}
+              onClick={() => {
+                setDiaExpandido(null);
+                setModalHorariosAberto(true);
+              }}
               className="rounded-2xl bg-amber-400 px-4 py-3 text-xs font-black text-neutral-950"
             >
               Configurar
             </button>
           </div>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
             <div className="rounded-2xl bg-neutral-950 p-4">
               <p className="text-xs text-neutral-400">Dias ativos</p>
               <p className="mt-1 text-sm font-black text-white">
@@ -397,12 +381,6 @@ export default function AgendaPage() {
               </p>
             </div>
 
-            <div className="rounded-2xl bg-neutral-950 p-4">
-              <p className="text-xs text-neutral-400">Pausa/almoço</p>
-              <p className="mt-1 text-sm font-black text-white">
-                {diasComPausa} dia(s) com pausa
-              </p>
-            </div>
           </div>
         </section>
 
@@ -412,10 +390,6 @@ export default function AgendaPage() {
           <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2 lg:mx-0 lg:px-0">
             {dias.map((dia) => {
               const lista = agendamentos.filter((a) => a.data === dia.data);
-              const pendentes = lista.filter(
-                (a) => a.status === "Pendente"
-              ).length;
-
               const previsto = lista
                 .filter((a) => a.status !== "Cancelado")
                 .reduce((total, a) => total + a.valor, 0);
@@ -427,7 +401,7 @@ export default function AgendaPage() {
                   key={dia.data}
                   type="button"
                   onClick={() => setDiaSelecionado(dia.data)}
-                  className={`min-w-[96px] rounded-3xl border p-3 text-left ${
+                  className={`min-w-[96px] rounded-3xl border p-3 text-center ${
                     ativo
                       ? "border-amber-400 bg-amber-400 text-neutral-950"
                       : "border-white/10 bg-neutral-900 text-white"
@@ -436,7 +410,7 @@ export default function AgendaPage() {
                   <span className="text-xs font-bold">{dia.semana}</span>
                   <strong className="block text-3xl">{dia.dia}</strong>
                   <p className="mt-1 text-xs opacity-70">
-                    {lista.length} marc. • {pendentes} pend.
+                    {lista.length} reserva(s)
                   </p>
                   <p className="mt-1 text-xs font-black">
                     {dinheiro(previsto)}
@@ -477,12 +451,12 @@ export default function AgendaPage() {
                         item.status
                       )}`}
                     >
-                      {item.status}
+                      Agendado
                     </span>
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-3">
                   <a
                     href={whatsappLink(item)}
                     target="_blank"
@@ -491,14 +465,6 @@ export default function AgendaPage() {
                   >
                     WhatsApp
                   </a>
-
-                  <button
-                    type="button"
-                    onClick={() => confirmarAgendamento(item.id)}
-                    className="rounded-2xl bg-white/10 px-3 py-3 text-xs font-black"
-                  >
-                    Confirmar
-                  </button>
 
                   <button
                     type="button"
@@ -724,6 +690,11 @@ export default function AgendaPage() {
                   className="rounded-3xl bg-neutral-950 p-4"
                 >
                   <div className="flex items-center justify-between gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setDiaExpandido((atual) => atual === dia.id ? null : dia.id)}
+                      className="flex flex-1 items-center justify-between gap-3 text-left"
+                    >
                     <div>
                       <h3 className="font-black">{dia.nome}</h3>
                       <p className="mt-1 text-xs text-neutral-400">
@@ -732,6 +703,12 @@ export default function AgendaPage() {
                           : "Fechado"}
                       </p>
                     </div>
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 bg-white/5 text-neutral-300 shadow-inner">
+                      <svg viewBox="0 0 20 20" aria-hidden="true" className={`h-4 w-4 transition-transform duration-200 ${diaExpandido === dia.id ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m5 7.5 5 5 5-5" />
+                      </svg>
+                    </span>
+                    </button>
 
                     <button
                       type="button"
@@ -752,7 +729,7 @@ export default function AgendaPage() {
                     </button>
                   </div>
 
-                  {dia.ativo && (
+                  {dia.ativo && diaExpandido === dia.id && (
                     <div className="mt-4 space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <label className="block">
@@ -873,7 +850,10 @@ export default function AgendaPage() {
             <div className="sticky bottom-0 -mx-5 mt-5 bg-neutral-900/95 px-5 pb-1 pt-4 backdrop-blur">
               <button
                 type="button"
-                onClick={() => setModalHorariosAberto(false)}
+                onClick={() => {
+                  salvarConfiguracaoAgenda({ diasFuncionamento, configAgenda });
+                  setModalHorariosAberto(false);
+                }}
                 className="w-full rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950"
               >
                 Salvar configurações
