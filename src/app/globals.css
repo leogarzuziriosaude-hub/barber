@@ -49,6 +49,14 @@ input[autocomplete="name"]:focus {
   box-shadow: 0 0 0 2px #fbbf24;
 }
 
+input[type="date"],
+input[type="time"] {
+  min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
+  font-size: 16px;
+}
+
 ::selection { background: var(--sand); color: var(--ink); }
 
 .display-font {
