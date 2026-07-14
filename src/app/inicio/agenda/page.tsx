@@ -399,9 +399,7 @@ export default function AgendaPage() {
         <div className="mt-5 flex items-center gap-2 border-b border-white/10 pb-4 text-sm text-neutral-400"><span className="h-2 w-2 rounded-full bg-amber-400" /><span>Total de reservas para hoje:</span><strong className="text-white">{totalReservasHoje}</strong></div>
 
         <section className="mt-6">
-          <h2 className="text-xl font-black">Dias</h2>
-
-          <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2 lg:mx-0 lg:px-0">
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 lg:mx-0 lg:px-0">
             {dias.map((dia) => {
               const lista = agendamentos
                 .filter((a) => a.data === dia.data)
@@ -417,18 +415,18 @@ export default function AgendaPage() {
                   key={dia.data}
                   type="button"
                   onClick={() => setDiaSelecionado(dia.data)}
-                  className={`min-w-[96px] rounded-3xl border p-3 text-center ${
+                  className={`min-w-[80px] rounded-2xl border px-2 py-2.5 text-center ${
                     ativo
                       ? "border-amber-400 bg-amber-400 text-neutral-950"
                       : "border-white/10 bg-neutral-900 text-white"
                   }`}
                 >
-                  <span className="text-xs font-bold">{dia.semana}</span>
-                  <strong className="block text-3xl">{dia.dia}</strong>
-                  <p className="mt-1 text-xs opacity-70">
+                  <span className="text-[11px] font-bold">{dia.semana}</span>
+                  <strong className="block text-2xl leading-tight">{dia.dia}</strong>
+                  <p className="mt-1 text-[10px] leading-tight opacity-70">
                     {lista.length} reserva(s)
                   </p>
-                  <p className="mt-1 text-xs font-black">
+                  <p className="mt-1 text-[10px] font-black">
                     {dinheiro(previsto)}
                   </p>
                 </button>
