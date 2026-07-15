@@ -109,14 +109,23 @@ input[type="time"]::-webkit-datetime-edit {
   margin-inline: auto;
   width: 100%;
   max-width: 74rem;
-  padding: calc(env(safe-area-inset-top, 0px) + 5rem) 1rem calc(env(safe-area-inset-bottom, 0px) + 6rem);
+  padding: calc(env(safe-area-inset-top, 0px) + 1rem) 1rem calc(env(safe-area-inset-bottom, 0px) + 6rem);
 }
 
-.mobile-menu-trigger { top: calc(env(safe-area-inset-top, 0px) + 1rem); }
+.mobile-menu-trigger {
+  top: 50%;
+  translate: 0 -50%;
+}
 .mobile-sidebar {
   height: 100dvh;
   padding-top: max(1.25rem, calc(env(safe-area-inset-top, 0px) + 1.25rem));
   padding-bottom: max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 1.25rem));
+}
+
+@media (min-width: 1024px) {
+  .page-wrap {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 2rem);
+  }
 }
 
 .safe-modal-shell {

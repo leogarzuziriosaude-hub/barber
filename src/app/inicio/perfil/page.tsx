@@ -98,12 +98,13 @@ export default function PerfilPage() {
   return (
     <main className="app-page">
       <div className="page-wrap">
-        <header className="hero-panel">
-          <p className="eyebrow">PH10 • Identidade</p>
-          <h1 className="display-font page-title mt-2">Perfil</h1>
-        </header>
+        <div className="mx-auto w-full max-w-3xl">
+          <header className="hero-panel">
+            <p className="eyebrow">PH10 • Identidade</p>
+            <h1 className="display-font page-title mt-2">Perfil</h1>
+          </header>
 
-        <section className="panel mt-5 p-5 lg:p-7">
+          <section className="panel mt-5 p-5 lg:p-7">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
             <div className="grid h-28 w-28 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-[#d8c29e]/40 bg-[#24211e] text-3xl font-black text-[#d8c29e]">
               {perfil.foto ? <NextImage src={perfil.foto} alt={`Foto de ${perfil.nome}`} width={112} height={112} unoptimized className="h-full w-full object-cover" /> : iniciais(perfil.nome)}
@@ -128,8 +129,9 @@ export default function PerfilPage() {
             <label className="block md:col-span-2"><span className="text-xs font-bold text-[#c8bfb4]">Endereço</span><input value={perfil.endereco} onChange={(event) => atualizar("endereco", event.target.value)} placeholder="Rua, número, bairro e cidade" autoComplete="street-address" className="mt-2 w-full rounded-2xl border border-[#eee2c9]/15 bg-[#191715] px-4 py-4 shadow-inner outline-none placeholder:text-[#70685f] focus:border-amber-400/50 focus:ring-2 focus:ring-amber-400/30" /></label>
           </div>
 
-          <button type="button" onClick={salvar} className="mt-6 w-full rounded-2xl bg-[#e7d7b8] px-5 py-4 text-sm font-black text-[#24211e] sm:w-auto">Salvar perfil</button>
-        </section>
+            <button type="button" onClick={salvar} className="mt-6 w-full rounded-2xl bg-[#e7d7b8] px-5 py-4 text-sm font-black text-[#24211e] sm:w-auto">Salvar perfil</button>
+          </section>
+        </div>
       </div>
 
       {erro && <div onClick={() => setErro("")} className="safe-modal-shell fixed inset-0 z-[300] flex items-center justify-center bg-black/75 backdrop-blur-sm"><div onClick={(event) => event.stopPropagation()} className="safe-modal-card w-full max-w-sm rounded-[2rem] border border-white/10 bg-neutral-900 p-6 text-center shadow-2xl"><div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-amber-400/10 text-2xl font-black text-amber-400">!</div><h2 className="mt-4 text-2xl font-black">Confira os dados</h2><p className="mt-2 text-sm leading-relaxed text-neutral-400">{erro}</p><button type="button" onClick={() => setErro("")} className="mt-6 w-full rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950">Entendi</button></div></div>}
