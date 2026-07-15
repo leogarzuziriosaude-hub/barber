@@ -156,14 +156,12 @@ input[type="time"]::-webkit-datetime-edit {
   .safe-modal-card input[type="date"] {
     width: 100%;
     max-width: 8.75rem;
-    margin-inline: auto;
     padding-block: .75rem !important;
   }
 
   .safe-modal-card input[type="time"] {
     width: 100%;
     max-width: 7rem;
-    margin-inline: auto;
     padding-block: .75rem !important;
   }
 }
