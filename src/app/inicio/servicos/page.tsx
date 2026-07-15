@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { carregarCombos, carregarServicos, salvarCombos, salvarServicos } from "@/lib/barber-storage";
+import NoticeDialog from "@/components/NoticeDialog";
 
 type Status = "Ativo" | "Inativo";
 
@@ -30,9 +31,33 @@ const servicosIniciais: Servico[] = [];
 const combosIniciais: Combo[] = [];
 
 function somenteNumeros(valor: string) { return valor.replace(/\D/g, ""); }
+function normalizarTexto(valor: string) { return valor.trim().replace(/\s+/g, " "); }
+function numeroDecimal(valor: string) {
+  const limpo = valor.trim().replace(/\s/g, "");
+  const normalizado = limpo.includes(",") ? limpo.replace(/\./g, "").replace(",", ".") : limpo;
+  return Number(normalizado);
+}
 function duracaoComUnidade(valor: string) {
   const numero = somenteNumeros(valor);
   return numero ? `${numero} min` : valor;
+}
+
+function recalcularComboComServicos(combo: Combo, listaServicos: Servico[], listaAnterior = listaServicos) {
+  const servicosIds = combo.servicosIds.filter((id) => listaServicos.some((servico) => servico.id === id));
+  const selecionados = listaServicos.filter((servico) => servicosIds.includes(servico.id));
+  const duracao = selecionados.reduce((total, servico) => total + Number(somenteNumeros(servico.duracao) || 0), 0);
+  const valorOriginal = selecionados.reduce((total, servico) => total + servico.valor, 0);
+  const valorOriginalAnterior = listaAnterior.filter((servico) => combo.servicosIds.includes(servico.id)).reduce((total, servico) => total + servico.valor, 0);
+  const descontoAnterior = valorOriginalAnterior > 0 ? Math.round((1 - combo.valor / valorOriginalAnterior) * 100) : 0;
+  const desconto = Math.min(99, Math.max(0, combo.descontoPercentual ?? descontoAnterior));
+  return {
+    ...combo,
+    servicosIds,
+    duracao: String(duracao),
+    valor: Number((valorOriginal * (1 - desconto / 100)).toFixed(2)),
+    descontoPercentual: desconto,
+    status: servicosIds.length >= 2 ? combo.status : "Inativo" as Status,
+  };
 }
 
 function dinheiro(valor: number) {
@@ -68,6 +93,7 @@ export default function ServicosPage() {
   const [servicosSelecionados, setServicosSelecionados] = useState<number[]>(
     []
   );
+  const [aviso, setAviso] = useState<{ titulo: string; descricao: string } | null>(null);
 
   useEffect(() => {
     function carregarDados() {
@@ -183,36 +209,31 @@ export default function ServicosPage() {
   }
 
   function salvarServico() {
-    if (!nomeServico || !duracaoServico || !valorServico) {
-      alert("Preencha nome, duração e valor.");
+    const nomeNormalizado = normalizarTexto(nomeServico);
+    const duracaoNumerica = Number(somenteNumeros(duracaoServico));
+    const valorNumerico = numeroDecimal(valorServico);
+    if (!nomeNormalizado || !duracaoServico || !valorServico) {
+      setAviso({ titulo: "Preencha o serviço", descricao: "Informe o nome, a duração e o valor do serviço." });
       return;
     }
-
-    const valorNumerico = Number(valorServico.replace(",", "."));
-
-    if (Number.isNaN(valorNumerico) || valorNumerico <= 0) {
-      alert("Informe um valor válido.");
+    if (!Number.isInteger(duracaoNumerica) || duracaoNumerica <= 0) {
+      setAviso({ titulo: "Duração inválida", descricao: "A duração do serviço precisa ser maior que zero minutos." });
+      return;
+    }
+    if (!Number.isFinite(valorNumerico) || valorNumerico <= 0) {
+      setAviso({ titulo: "Valor inválido", descricao: "Informe um valor maior que zero para o serviço." });
       return;
     }
 
     if (servicoEditando) {
-      setServicos((listaAtual) =>
-        listaAtual.map((servico) =>
-          servico.id === servicoEditando.id
-            ? {
-                ...servico,
-                nome: nomeServico,
-                duracao: somenteNumeros(duracaoServico),
-                valor: valorNumerico,
-              }
-            : servico
-        )
-      );
+      const novaLista = servicos.map((servico) => servico.id === servicoEditando.id ? { ...servico, nome: nomeNormalizado, duracao: String(duracaoNumerica), valor: valorNumerico } : servico);
+      setServicos(novaLista);
+      setCombos((listaAtual) => listaAtual.map((combo) => combo.servicosIds.includes(servicoEditando.id) ? recalcularComboComServicos(combo, novaLista, servicos) : combo));
     } else {
       const novoServico: Servico = {
         id: Date.now(),
-        nome: nomeServico,
-        duracao: somenteNumeros(duracaoServico),
+        nome: nomeNormalizado,
+        duracao: String(duracaoNumerica),
         valor: valorNumerico,
         status: "Ativo",
       };
@@ -224,20 +245,24 @@ export default function ServicosPage() {
   }
 
   function salvarCombo() {
-    if (!nomeCombo || !duracaoCombo || !valorCombo) {
-      alert("Preencha nome, duração e valor do combo.");
+    const nomeNormalizado = normalizarTexto(nomeCombo);
+    const duracaoNumerica = Number(somenteNumeros(duracaoCombo));
+    const valorNumerico = numeroDecimal(valorCombo);
+    if (!nomeNormalizado || !duracaoCombo || !valorCombo) {
+      setAviso({ titulo: "Preencha o combo", descricao: "Informe o nome, a duração e o valor do combo." });
       return;
     }
 
     if (servicosSelecionados.length < 2) {
-      alert("Selecione pelo menos 2 serviços para criar um combo.");
+      setAviso({ titulo: "Selecione os serviços", descricao: "Escolha pelo menos dois serviços para criar um combo." });
       return;
     }
-
-    const valorNumerico = Number(valorCombo.replace(",", "."));
-
-    if (Number.isNaN(valorNumerico) || valorNumerico <= 0) {
-      alert("Informe um valor válido.");
+    if (!Number.isInteger(duracaoNumerica) || duracaoNumerica <= 0) {
+      setAviso({ titulo: "Duração inválida", descricao: "A duração do combo precisa ser maior que zero minutos." });
+      return;
+    }
+    if (!Number.isFinite(valorNumerico) || valorNumerico <= 0) {
+      setAviso({ titulo: "Valor inválido", descricao: "O valor final do combo precisa ser maior que zero." });
       return;
     }
 
@@ -247,8 +272,8 @@ export default function ServicosPage() {
           combo.id === comboEditando.id
             ? {
                 ...combo,
-                nome: nomeCombo,
-                duracao: somenteNumeros(duracaoCombo),
+                nome: nomeNormalizado,
+                duracao: String(duracaoNumerica),
                 valor: valorNumerico,
                 descontoPercentual: Number(descontoCombo || 0),
                 servicosIds: servicosSelecionados,
@@ -259,8 +284,8 @@ export default function ServicosPage() {
     } else {
       const novoCombo: Combo = {
         id: Date.now(),
-        nome: nomeCombo,
-        duracao: somenteNumeros(duracaoCombo),
+        nome: nomeNormalizado,
+        duracao: String(duracaoNumerica),
         servicosIds: servicosSelecionados,
         valor: valorNumerico,
         descontoPercentual: Number(descontoCombo || 0),
@@ -287,7 +312,7 @@ export default function ServicosPage() {
   }
 
   function atualizarDescontoCombo(valor: string) {
-    const desconto = Math.min(100, Number(somenteNumeros(valor) || 0));
+    const desconto = Math.min(99, Number(somenteNumeros(valor) || 0));
     const valorOriginal = servicos
       .filter((item) => servicosSelecionados.includes(item.id))
       .reduce((total, item) => total + item.valor, 0);
@@ -297,19 +322,9 @@ export default function ServicosPage() {
 
   function apagarServico() {
     if (!servicoParaApagar) return;
-
-    setServicos((listaAtual) =>
-      listaAtual.filter((servico) => servico.id !== servicoParaApagar.id)
-    );
-
-    setCombos((listaAtual) =>
-      listaAtual.map((combo) => ({
-        ...combo,
-        servicosIds: combo.servicosIds.filter(
-          (id) => id !== servicoParaApagar.id
-        ),
-      }))
-    );
+    const novaLista = servicos.filter((servico) => servico.id !== servicoParaApagar.id);
+    setServicos(novaLista);
+    setCombos((listaAtual) => listaAtual.map((combo) => combo.servicosIds.includes(servicoParaApagar.id) ? recalcularComboComServicos(combo, novaLista, servicos) : combo));
 
     fecharTudo();
   }
@@ -799,14 +814,14 @@ export default function ServicosPage() {
             onClick={(event) => event.stopPropagation()}
             className="w-full max-w-sm rounded-[2rem] bg-neutral-900 p-6 text-center text-white shadow-2xl"
           >
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-2xl">
-              ⚠️
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-2xl font-black text-red-300">
+              !
             </div>
 
-            <h2 className="mt-4 text-2xl font-black">Desativar serviço?</h2>
+            <h2 className="mt-4 text-2xl font-black">Excluir serviço?</h2>
 
             <p className="mt-2 text-sm text-neutral-400">
-              Tem certeza que deseja desativar{" "}
+              Tem certeza que deseja excluir{" "}
               <strong className="text-white">{servicoParaApagar.nome}</strong>?
             </p>
 
@@ -824,7 +839,7 @@ export default function ServicosPage() {
                 onClick={apagarServico}
                 className="rounded-2xl bg-red-500 px-4 py-4 text-sm font-black text-white"
               >
-                Desativar
+                Excluir
               </button>
             </div>
           </div>
@@ -840,14 +855,14 @@ export default function ServicosPage() {
             onClick={(event) => event.stopPropagation()}
             className="w-full max-w-sm rounded-[2rem] bg-neutral-900 p-6 text-center text-white shadow-2xl"
           >
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-2xl">
-              ⚠️
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-2xl font-black text-red-300">
+              !
             </div>
 
-            <h2 className="mt-4 text-2xl font-black">Desativar combo?</h2>
+            <h2 className="mt-4 text-2xl font-black">Excluir combo?</h2>
 
             <p className="mt-2 text-sm text-neutral-400">
-              Tem certeza que deseja desativar{" "}
+              Tem certeza que deseja excluir{" "}
               <strong className="text-white">{comboParaApagar.nome}</strong>?
             </p>
 
@@ -865,12 +880,13 @@ export default function ServicosPage() {
                 onClick={apagarCombo}
                 className="rounded-2xl bg-red-500 px-4 py-4 text-sm font-black text-white"
               >
-                Desativar
+                Excluir
               </button>
             </div>
           </div>
         </div>
       )}
+      {aviso && <NoticeDialog titulo={aviso.titulo} descricao={aviso.descricao} onFechar={() => setAviso(null)} />}
     </main>
   );
 }

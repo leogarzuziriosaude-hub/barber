@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Agendamento as AgendamentoBase, BloqueioAgenda, StatusAtendimento, carregarAgendamentos, carregarBloqueios, carregarConfiguracaoAgenda, dataLocal, obterStatusAtendimento, proximosDias, registrarAlteracaoAgendamento, reservaEstaAtiva, salvarAgendamentos, salvarBloqueios, salvarConfiguracaoAgenda } from "@/lib/barber-storage";
+import { intervalosSeSobrepoem, validarDiasFuncionamento } from "@/lib/agenda-rules.mjs";
 import AppointmentCard from "@/components/agenda/AppointmentCard";
 import ConfirmDialog from "@/components/agenda/ConfirmDialog";
+import NoticeDialog from "@/components/NoticeDialog";
 
 type Status = StatusAtendimento;
 
@@ -168,6 +170,7 @@ export default function AgendaPage() {
   const [agoraRemarcacao, setAgoraRemarcacao] = useState(0);
   const [agendamentoEditarStatus, setAgendamentoEditarStatus] = useState<Agendamento | null>(null);
   const [confirmacao, setConfirmacao] = useState<Confirmacao | null>(null);
+  const [aviso, setAviso] = useState<{ titulo: string; descricao: string } | null>(null);
 
   const [diasFuncionamento, setDiasFuncionamento] = useState<
     DiaFuncionamento[]
@@ -192,6 +195,9 @@ export default function AgendaPage() {
       }
     }
     carregar();
+    const eventos = ["storage", "ph10:agendamentos-atualizados", "ph10:bloqueios-atualizados", "ph10:agenda-config-atualizada"];
+    eventos.forEach((evento) => window.addEventListener(evento, carregar));
+    return () => eventos.forEach((evento) => window.removeEventListener(evento, carregar));
   }, []);
 
   useEffect(() => {
@@ -237,13 +243,13 @@ export default function AgendaPage() {
       const hora = `${String(Math.floor(atual / 60)).padStart(2, "0")}:${String(atual % 60).padStart(2, "0")}`;
       const fim = atual + duracao;
       const instante = new Date(`${novaData}T${hora}:00`).getTime();
-      const sobrepoePausa = expediente.temPausa && atual < minutos(expediente.pausaFim) && fim > minutos(expediente.pausaInicio);
-      const sobrepoeBloqueio = bloqueios.some((item) => item.data === novaData && atual < (item.diaInteiro ? 24 * 60 : minutos(item.fim)) && fim > (item.diaInteiro ? 0 : minutos(item.inicio)));
+      const sobrepoePausa = expediente.temPausa && intervalosSeSobrepoem(atual, fim, minutos(expediente.pausaInicio), minutos(expediente.pausaFim));
+      const sobrepoeBloqueio = bloqueios.some((item) => item.data === novaData && intervalosSeSobrepoem(atual, fim, item.diaInteiro ? 0 : minutos(item.inicio), item.diaInteiro ? 24 * 60 : minutos(item.fim)));
       const sobrepoeReserva = agendamentos.some((item) => {
         if (item.id === agendamentoRemarcar.id || item.data !== novaData || !reservaEstaAtiva(item, agoraRemarcacao)) return false;
         const inicioExistente = minutos(item.hora);
         const fimExistente = inicioExistente + (item.duracaoMinutos ?? intervalo);
-        return atual <= fimExistente && fim >= inicioExistente;
+        return intervalosSeSobrepoem(atual, fim, inicioExistente, fimExistente);
       });
       if (fim <= minutos(expediente.fechamento) && instante >= limiteMinimo && !sobrepoePausa && !sobrepoeBloqueio && !sobrepoeReserva) disponiveis.push(hora);
     }
@@ -294,18 +300,18 @@ export default function AgendaPage() {
 
   function salvarBloqueio() {
     if (!bloqueioData || !bloqueioMotivo.trim() || (!bloqueioDiaInteiro && (!bloqueioInicio || !bloqueioFim))) {
-      alert("Preencha a data, o período e o motivo.");
+      setAviso({ titulo: "Preencha o bloqueio", descricao: "Informe a data, o período e o motivo antes de continuar." });
       return;
     }
     const inicio = bloqueioDiaInteiro ? 0 : minutos(bloqueioInicio);
     const fim = bloqueioDiaInteiro ? 24 * 60 : minutos(bloqueioFim);
-    if (fim <= inicio) { alert("O horário final precisa ser depois do inicial."); return; }
+    if (fim <= inicio) { setAviso({ titulo: "Período inválido", descricao: "O horário final precisa ser posterior ao horário inicial." }); return; }
 
     const conflitos = agendamentos.filter((item) => {
       if (item.data !== bloqueioData || !reservaEstaAtiva(item, agoraRemarcacao)) return false;
       const inicioReserva = minutos(item.hora);
       const fimReserva = inicioReserva + (item.duracaoMinutos ?? Number(configAgenda.intervalo));
-      return inicio < fimReserva && fim > inicioReserva;
+      return intervalosSeSobrepoem(inicio, fim, inicioReserva, fimReserva);
     });
     if (conflitos.length > 0) { setConflitosBloqueio(conflitos); return; }
 
@@ -346,7 +352,7 @@ export default function AgendaPage() {
   }
 
   function concluirRemarcacao() {
-    if (!agendamentoRemarcar || !novaData || !novoHorario) { alert("Escolha a nova data e o novo horário."); return; }
+    if (!agendamentoRemarcar || !novaData || !novoHorario) { setAviso({ titulo: "Escolha um horário", descricao: "Informe a nova data e o novo horário para concluir a remarcação." }); return; }
     const anterior = agendamentoRemarcar;
     const novaLista = agendamentos.map((item) => {
       if (item.id !== anterior.id) return item;
@@ -781,6 +787,11 @@ export default function AgendaPage() {
               <button
                 type="button"
                 onClick={() => {
+                  const erroConfiguracao = validarDiasFuncionamento(diasFuncionamento);
+                  if (erroConfiguracao) {
+                    setAviso({ titulo: "Confira os horários", descricao: erroConfiguracao });
+                    return;
+                  }
                   salvarConfiguracaoAgenda({ diasFuncionamento, configAgenda });
                   setModalHorariosAberto(false);
                 }}
@@ -800,6 +811,7 @@ export default function AgendaPage() {
         onConfirmar={executarConfirmacao}
         onFechar={() => setConfirmacao(null)}
       />
+      {aviso && <NoticeDialog titulo={aviso.titulo} descricao={aviso.descricao} onFechar={() => setAviso(null)} />}
     </main>
   );
 }

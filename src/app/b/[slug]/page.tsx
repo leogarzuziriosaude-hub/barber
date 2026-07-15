@@ -23,6 +23,7 @@ import {
   salvarAgendamentos,
   perfilInicial,
 } from "@/lib/barber-storage";
+import { intervalosSeSobrepoem } from "@/lib/agenda-rules.mjs";
 
 const idsDosDias = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
 
@@ -82,6 +83,21 @@ export default function PaginaCliente() {
       setCarregado(true);
     }
     carregar();
+    const eventos = [
+      "storage",
+      "ph10:agendamentos-atualizados",
+      "ph10:bloqueios-atualizados",
+      "ph10:servicos-atualizados",
+      "ph10:combos-atualizados",
+      "ph10:agenda-config-atualizada",
+      "ph10:perfil-atualizado",
+    ];
+    eventos.forEach((evento) => window.addEventListener(evento, carregar));
+    const intervalo = window.setInterval(() => setAgora(Date.now()), 30_000);
+    return () => {
+      eventos.forEach((evento) => window.removeEventListener(evento, carregar));
+      window.clearInterval(intervalo);
+    };
   }, []);
 
   const opcoesAgendamento: Servico[] = [
@@ -111,8 +127,8 @@ export default function PaginaCliente() {
       const hora = horaFormatada(atual);
       const instante = new Date(`${dia}T${hora}:00`).getTime();
       const fimDoServico = atual + duracaoSelecionada;
-      const sobrepoePausa = expediente.temPausa && atual < minutos(expediente.pausaFim) && fimDoServico > minutos(expediente.pausaInicio);
-      const sobrepoeBloqueio = bloqueios.some((bloqueio) => bloqueio.data === dia && atual < (bloqueio.diaInteiro ? 24 * 60 : minutos(bloqueio.fim)) && fimDoServico > (bloqueio.diaInteiro ? 0 : minutos(bloqueio.inicio)));
+      const sobrepoePausa = expediente.temPausa && intervalosSeSobrepoem(atual, fimDoServico, minutos(expediente.pausaInicio), minutos(expediente.pausaFim));
+      const sobrepoeBloqueio = bloqueios.some((bloqueio) => bloqueio.data === dia && intervalosSeSobrepoem(atual, fimDoServico, bloqueio.diaInteiro ? 0 : minutos(bloqueio.inicio), bloqueio.diaInteiro ? 24 * 60 : minutos(bloqueio.fim)));
       const terminaNoExpediente = fimDoServico <= minutos(expediente.fechamento);
       if (!sobrepoePausa && !sobrepoeBloqueio && terminaNoExpediente && instante >= limiteMinimo) lista.push(hora);
     }
@@ -128,7 +144,7 @@ export default function PaginaCliente() {
         return reservasDoDia.some((reserva) => {
           const inicioReserva = minutos(reserva.hora);
           const fimReserva = inicioReserva + (reserva.duracaoMinutos ?? intervaloPadrao);
-          return inicioPretendido <= fimReserva && fimPretendido >= inicioReserva;
+          return intervalosSeSobrepoem(inicioPretendido, fimPretendido, inicioReserva, fimReserva);
         });
       }));
     },
@@ -155,27 +171,38 @@ export default function PaginaCliente() {
     }
 
     const listaAtual = carregarAgendamentos();
+    const agoraAtual = Date.now();
+    const configuracaoAtual = carregarConfiguracaoAgenda();
+    const bloqueiosAtuais = carregarBloqueios();
+    const dataSelecionada = new Date(`${dia}T12:00:00`);
+    const expedienteAtual = configuracaoAtual?.diasFuncionamento.find((item) => item.id === idsDosDias[dataSelecionada.getDay()]);
+    const inicioPretendido = minutos(horario);
+    const fimPretendido = inicioPretendido + duracaoSelecionada;
+    const instantePretendido = new Date(`${dia}T${horario}:00`).getTime();
+    const antecedencia = Number(configuracaoAtual?.configAgenda.antecedenciaMinima ?? 1) * 60 * 60 * 1000;
+    const sobrepoePausaAtual = Boolean(expedienteAtual?.temPausa) && intervalosSeSobrepoem(inicioPretendido, fimPretendido, minutos(expedienteAtual?.pausaInicio ?? "00:00"), minutos(expedienteAtual?.pausaFim ?? "00:00"));
+    const sobrepoeBloqueioAtual = bloqueiosAtuais.some((bloqueio) => bloqueio.data === dia && intervalosSeSobrepoem(inicioPretendido, fimPretendido, bloqueio.diaInteiro ? 0 : minutos(bloqueio.inicio), bloqueio.diaInteiro ? 24 * 60 : minutos(bloqueio.fim)));
+    const foraDoExpediente = !expedienteAtual?.ativo || inicioPretendido < minutos(expedienteAtual.abertura) || fimPretendido > minutos(expedienteAtual.fechamento);
+    if (!configuracaoAtual || foraDoExpediente || sobrepoePausaAtual || sobrepoeBloqueioAtual || instantePretendido < agoraAtual + antecedencia) {
+      setConfiguracao(configuracaoAtual);
+      setBloqueios(bloqueiosAtuais);
+      setAgora(agoraAtual);
+      setHorario("");
+      setAvisoFormulario({ titulo: "Horário indisponível", mensagem: "A disponibilidade desse horário mudou. Escolha uma nova opção para continuar." });
+      return;
+    }
     const numeroCompletoCliente = `5521${whatsapp}`;
-    const reservaExistente = listaAtual.find((item) => item.whatsapp.replace(/\D/g, "").endsWith(whatsapp) && reservaEstaAtiva(item, agora));
+    const reservaExistente = listaAtual.find((item) => item.whatsapp.replace(/\D/g, "").endsWith(whatsapp) && reservaEstaAtiva(item, agoraAtual));
     if (reservaExistente) {
       setReservaExistenteAviso(reservaExistente);
       return;
     }
-    const inicioPretendidoBloqueio = minutos(horario);
-    const bloqueioAtual = carregarBloqueios().some((bloqueio) => bloqueio.data === dia && inicioPretendidoBloqueio < (bloqueio.diaInteiro ? 24 * 60 : minutos(bloqueio.fim)) && inicioPretendidoBloqueio + duracaoSelecionada > (bloqueio.diaInteiro ? 0 : minutos(bloqueio.inicio)));
-    if (bloqueioAtual) {
-      setBloqueios(carregarBloqueios());
-      setHorario("");
-      setAvisoFormulario({ titulo: "Período indisponível", mensagem: "Esse período não está mais disponível. Escolha outro horário." });
-      return;
-    }
-    const inicioPretendido = minutos(horario);
-    const intervaloPadrao = Number(configuracao?.configAgenda.intervalo ?? 30);
+    const intervaloPadrao = Number(configuracaoAtual.configAgenda.intervalo);
     const existeConflito = listaAtual.some((item) => {
-      if (item.data !== dia || !reservaEstaAtiva(item, agora)) return false;
+      if (item.data !== dia || !reservaEstaAtiva(item, agoraAtual)) return false;
       const inicioReserva = minutos(item.hora);
       const fimReserva = inicioReserva + (item.duracaoMinutos ?? intervaloPadrao);
-      return inicioPretendido <= fimReserva && inicioPretendido + duracaoSelecionada >= inicioReserva;
+      return intervalosSeSobrepoem(inicioPretendido, fimPretendido, inicioReserva, fimReserva);
     });
     if (existeConflito) {
       setAgendamentos(listaAtual);

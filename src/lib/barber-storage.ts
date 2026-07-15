@@ -108,9 +108,18 @@ export const carregarServicos = () => carregarLista<Servico>(SERVICOS_KEY);
 export const carregarCombos = () => carregarLista<Combo>(COMBOS_KEY);
 export const carregarBloqueios = () => carregarLista<BloqueioAgenda>(BLOQUEIOS_KEY);
 export const carregarClientes = () => carregarLista<Cliente>(CLIENTES_KEY);
-export function salvarServicos(servicos: Servico[]) { localStorage.setItem(SERVICOS_KEY, JSON.stringify(servicos)); }
-export function salvarCombos(combos: Combo[]) { localStorage.setItem(COMBOS_KEY, JSON.stringify(combos)); }
-export function salvarBloqueios(bloqueios: BloqueioAgenda[]) { localStorage.setItem(BLOQUEIOS_KEY, JSON.stringify(bloqueios)); }
+export function salvarServicos(servicos: Servico[]) {
+  localStorage.setItem(SERVICOS_KEY, JSON.stringify(servicos));
+  window.dispatchEvent(new Event("ph10:servicos-atualizados"));
+}
+export function salvarCombos(combos: Combo[]) {
+  localStorage.setItem(COMBOS_KEY, JSON.stringify(combos));
+  window.dispatchEvent(new Event("ph10:combos-atualizados"));
+}
+export function salvarBloqueios(bloqueios: BloqueioAgenda[]) {
+  localStorage.setItem(BLOQUEIOS_KEY, JSON.stringify(bloqueios));
+  window.dispatchEvent(new Event("ph10:bloqueios-atualizados"));
+}
 export function salvarClientes(clientes: Cliente[]) {
   localStorage.setItem(CLIENTES_KEY, JSON.stringify(clientes));
   window.dispatchEvent(new Event("ph10:clientes-atualizados"));
@@ -145,6 +154,7 @@ export function carregarConfiguracaoAgenda(): ConfiguracaoAgenda | null {
 }
 export function salvarConfiguracaoAgenda(configuracao: ConfiguracaoAgenda) {
   localStorage.setItem(AGENDA_CONFIG_KEY, JSON.stringify(configuracao));
+  window.dispatchEvent(new Event("ph10:agenda-config-atualizada"));
 }
 
 export const perfilInicial: PerfilBarbearia = {

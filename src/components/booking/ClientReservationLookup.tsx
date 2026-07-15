@@ -13,6 +13,7 @@ import {
   reservaEstaAtiva,
   salvarAgendamentos,
 } from "@/lib/barber-storage";
+import { intervalosSeSobrepoem } from "@/lib/agenda-rules.mjs";
 
 type Props = {
   agendamentos: Agendamento[];
@@ -77,13 +78,13 @@ export default function ClientReservationLookup({ agendamentos, bloqueios, confi
       const hora = horaFormatada(atual);
       const fim = atual + duracao;
       const instante = new Date(`${novaData}T${hora}:00`).getTime();
-      const sobrepoePausa = expediente.temPausa && atual < minutos(expediente.pausaFim) && fim > minutos(expediente.pausaInicio);
-      const sobrepoeBloqueio = bloqueios.some((item) => item.data === novaData && atual < (item.diaInteiro ? 24 * 60 : minutos(item.fim)) && fim > (item.diaInteiro ? 0 : minutos(item.inicio)));
+      const sobrepoePausa = expediente.temPausa && intervalosSeSobrepoem(atual, fim, minutos(expediente.pausaInicio), minutos(expediente.pausaFim));
+      const sobrepoeBloqueio = bloqueios.some((item) => item.data === novaData && intervalosSeSobrepoem(atual, fim, item.diaInteiro ? 0 : minutos(item.inicio), item.diaInteiro ? 24 * 60 : minutos(item.fim)));
       const sobrepoeReserva = agendamentos.some((item) => {
         if (item.id === reserva.id || item.data !== novaData || !reservaEstaAtiva(item, relogio)) return false;
         const inicioExistente = minutos(item.hora);
         const fimExistente = inicioExistente + (item.duracaoMinutos ?? intervalo);
-        return atual < fimExistente && fim > inicioExistente;
+        return intervalosSeSobrepoem(atual, fim, inicioExistente, fimExistente);
       });
       if (fim <= minutos(expediente.fechamento) && instante >= limiteMinimo && !sobrepoePausa && !sobrepoeBloqueio && !sobrepoeReserva) disponiveis.push(hora);
     }
