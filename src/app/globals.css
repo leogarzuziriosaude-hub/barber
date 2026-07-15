@@ -91,13 +91,9 @@ input[type="time"]::-webkit-datetime-edit {
 
 .mobile-form-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .mobile-form-grid > * { min-width: 0; }
-
-@media (min-width: 640px) {
-  .mobile-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 
 ::selection { background: var(--sand); color: var(--ink); }
 
