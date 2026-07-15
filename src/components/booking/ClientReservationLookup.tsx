@@ -110,9 +110,9 @@ export default function ClientReservationLookup({ agendamentos, bloqueios, confi
     }
     const numero = normalizarWhatsapp(`5521${whatsapp}`);
     const resposta = await fetch(`/api/public/reservas?codigo=${encodeURIComponent(codigo.toUpperCase())}&whatsapp=${numero}`, { cache: "no-store" });
-    const resultado = await resposta.json() as { reserva?: Agendamento };
+    const resultado = await resposta.json() as { reserva?: Agendamento; erro?: string };
     if (!resposta.ok || !resultado.reserva) {
-      setErro("Não encontramos uma reserva com esses dados.");
+      setErro(resultado.erro ?? "Não encontramos uma reserva com esses dados.");
       return;
     }
     setReserva(resultado.reserva);
@@ -130,8 +130,8 @@ export default function ClientReservationLookup({ agendamentos, bloqueios, confi
 
     if (confirmacao === "remarcar" && (!novaData || !novoHorario)) return;
     const resposta = await fetch("/api/public/reservas", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codigo: reserva.codigo, whatsapp: reserva.whatsapp, acao: confirmacao, data: novaData, hora: novoHorario }) });
-    const resultado = await resposta.json() as { reserva?: Agendamento };
-    if (!resposta.ok || !resultado.reserva) { setConfirmacao(null); setErro("Não foi possível alterar a reserva."); return; }
+    const resultado = await resposta.json() as { reserva?: Agendamento; erro?: string };
+    if (!resposta.ok || !resultado.reserva) { setConfirmacao(null); setErro(resultado.erro ?? "Não foi possível alterar a reserva."); return; }
     const atualizada = resultado.reserva;
     setSucesso(confirmacao === "cancelar" ? "cancelada" : "remarcada");
     const novaLista = agendamentos.map((item) => item.id === reserva.id ? atualizada : item);

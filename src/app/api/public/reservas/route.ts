@@ -4,6 +4,7 @@ import { buscarCatalogo } from "@/lib/supabase/catalogo";
 import { buscarConfiguracao, agendaDoBanco } from "@/lib/supabase/configuracoes";
 import { buscarAgendamentos, buscarBloqueios } from "@/lib/supabase/agenda";
 import { intervalosSeSobrepoem } from "@/lib/agenda-rules.mjs";
+import { chaveRateLimit, consumirRateLimit, ipDaRequisicao, limparRateLimit, respostaBloqueada } from "@/lib/supabase/rate-limit";
 
 const idsDias = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
 function minutos(hora: string) { const [h, m] = hora.split(":").map(Number); return h * 60 + m; }
@@ -11,19 +12,39 @@ function protocolo() { const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; return 
 function respostaReserva(item: Awaited<ReturnType<typeof buscarAgendamentos>>[number]) { return item; }
 
 export async function GET(request: NextRequest) {
+  const supabase = criarClienteSupabaseAdmin();
+  const ip = ipDaRequisicao(request);
+  const chaveGeral = chaveRateLimit("consulta-geral", ip);
+  const geral = await consumirRateLimit(supabase, chaveGeral, { limite: 30, janelaSegundos: 60, bloqueioSegundos: 300 });
+  if (!geral.permitido) return respostaBloqueada(geral.tentar_em);
   const codigo = request.nextUrl.searchParams.get("codigo")?.toUpperCase();
   const whatsapp = request.nextUrl.searchParams.get("whatsapp")?.replace(/\D/g, "");
-  if (!codigo || !whatsapp) return NextResponse.json({ erro: "Dados inválidos." }, { status: 400 });
-  const reservas = await buscarAgendamentos(criarClienteSupabaseAdmin());
+  const chaveFalhas = chaveRateLimit("consulta-falhas", ip);
+  if (!codigo || !whatsapp) {
+    const falha = await consumirRateLimit(supabase, chaveFalhas, { limite: 5, janelaSegundos: 900, bloqueioSegundos: 1800 });
+    if (!falha.permitido) return respostaBloqueada(falha.tentar_em);
+    return NextResponse.json({ erro: "Não encontramos uma reserva com esses dados." }, { status: 404 });
+  }
+  const reservas = await buscarAgendamentos(supabase);
   const reserva = reservas.find((item) => item.codigo === codigo && item.whatsapp === whatsapp);
-  return reserva ? NextResponse.json({ reserva: respostaReserva(reserva) }) : NextResponse.json({ erro: "Reserva não encontrada." }, { status: 404 });
+  if (!reserva) {
+    const falha = await consumirRateLimit(supabase, chaveFalhas, { limite: 5, janelaSegundos: 900, bloqueioSegundos: 1800 });
+    if (!falha.permitido) return respostaBloqueada(falha.tentar_em);
+    return NextResponse.json({ erro: "Não encontramos uma reserva com esses dados." }, { status: 404 });
+  }
+  await limparRateLimit(supabase, chaveFalhas);
+  return NextResponse.json({ reserva: respostaReserva(reserva) });
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = criarClienteSupabaseAdmin();
+    const limiteIp = await consumirRateLimit(supabase, chaveRateLimit("criar-reserva-ip", ipDaRequisicao(request)), { limite: 8, janelaSegundos: 600, bloqueioSegundos: 900 });
+    if (!limiteIp.permitido) return respostaBloqueada(limiteIp.tentar_em);
     const corpo = await request.json() as { nome: string; whatsapp: string; itens: Array<{ tipo: "servico" | "combo"; id: string }>; data: string; hora: string };
     if (!/^[A-Za-zÀ-ÖØ-öø-ÿ]+(?:\s+[A-Za-zÀ-ÖØ-öø-ÿ]+)*$/.test(corpo.nome?.trim()) || !/^55219\d{8}$/.test(corpo.whatsapp ?? "")) throw new Error("dados");
-    const supabase = criarClienteSupabaseAdmin();
+    const limiteTelefone = await consumirRateLimit(supabase, chaveRateLimit("criar-reserva-whatsapp", corpo.whatsapp), { limite: 4, janelaSegundos: 3600, bloqueioSegundos: 3600 });
+    if (!limiteTelefone.permitido) return respostaBloqueada(limiteTelefone.tentar_em);
     const [catalogo, configBanco, bloqueios, reservas] = await Promise.all([buscarCatalogo(supabase, true), buscarConfiguracao(supabase), buscarBloqueios(supabase), buscarAgendamentos(supabase)]);
     const selecoes = corpo.itens?.map((selecao) => selecao.tipo === "servico" ? catalogo.servicos.find((x) => x.id === selecao.id) : catalogo.combos.find((x) => x.id === selecao.id));
     if (!selecoes?.length || selecoes.some((item) => !item) || corpo.itens.some((item) => item.tipo !== "servico" && item.tipo !== "combo")) return NextResponse.json({ erro: "Seleção de serviços inválida." }, { status: 409 });
@@ -66,6 +87,8 @@ export async function PATCH(request: NextRequest) {
   try {
     const corpo = await request.json() as { codigo: string; whatsapp: string; acao: "cancelar" | "remarcar"; data?: string; hora?: string };
     const supabase = criarClienteSupabaseAdmin();
+    const limite = await consumirRateLimit(supabase, chaveRateLimit("alterar-reserva-ip", ipDaRequisicao(request)), { limite: 10, janelaSegundos: 600, bloqueioSegundos: 900 });
+    if (!limite.permitido) return respostaBloqueada(limite.tentar_em);
     const reservas = await buscarAgendamentos(supabase);
     const reserva = reservas.find((x) => x.codigo === corpo.codigo && x.whatsapp === corpo.whatsapp);
     if (!reserva || new Date(`${reserva.data}T${reserva.hora}:00-03:00`).getTime() - Date.now() < 2 * 3600000) return NextResponse.json({ erro: "Alteração não permitida." }, { status: 409 });
