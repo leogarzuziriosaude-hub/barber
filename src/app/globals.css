@@ -183,12 +183,12 @@ input[type="time"]::-webkit-datetime-edit {
 .hero-panel::after {
   content: "";
   position: absolute;
-  width: 13rem;
-  height: 13rem;
-  right: -4rem;
-  top: -6rem;
-  border: 1px solid rgba(216, 194, 158, .17);
+  width: 15rem;
+  height: 15rem;
+  right: -5rem;
+  top: -7rem;
   border-radius: 999px;
+  background: radial-gradient(circle, rgba(216, 194, 158, .14) 0%, rgba(216, 194, 158, .05) 38%, transparent 70%);
   pointer-events: none;
 }
 
