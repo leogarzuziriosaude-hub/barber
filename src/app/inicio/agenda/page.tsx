@@ -1,24 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BloqueioAgenda, StatusAtendimento, carregarAgendamentos, carregarBloqueios, carregarConfiguracaoAgenda, dataLocal, obterStatusAtendimento, proximosDias, reservaEstaAtiva, salvarAgendamentos, salvarBloqueios, salvarConfiguracaoAgenda } from "@/lib/barber-storage";
+import { Agendamento as AgendamentoBase, BloqueioAgenda, StatusAtendimento, carregarAgendamentos, carregarBloqueios, carregarConfiguracaoAgenda, dataLocal, obterStatusAtendimento, proximosDias, registrarAlteracaoAgendamento, reservaEstaAtiva, salvarAgendamentos, salvarBloqueios, salvarConfiguracaoAgenda } from "@/lib/barber-storage";
 import AppointmentCard from "@/components/agenda/AppointmentCard";
 import ConfirmDialog from "@/components/agenda/ConfirmDialog";
 
 type Status = StatusAtendimento;
 
-type Agendamento = {
-  id: number;
-  data: string;
-  hora: string;
-  cliente: string;
-  servico: string;
-  valor: number;
-  status: Status;
-  whatsapp: string;
-  duracaoMinutos?: number;
-  statusManual?: "Cancelado" | "Não compareceu";
-};
+type Agendamento = AgendamentoBase & { status: Status };
 
 type DiaFuncionamento = {
   id: string;
@@ -279,7 +268,16 @@ export default function AgendaPage() {
 
   function alterarStatusAtendimento(statusManual?: "Cancelado" | "Não compareceu", alvo = agendamentoEditarStatus) {
     if (!alvo) return;
-    const novaLista = agendamentos.map((item) => item.id === alvo.id ? { ...item, statusManual, status: obterStatusAtendimento({ ...item, statusManual }, agoraRemarcacao) } : item);
+    const novaLista = agendamentos.map((item) => {
+      if (item.id !== alvo.id) return item;
+      const statusAnterior = obterStatusAtendimento(item, agoraRemarcacao);
+      const baseAtualizada = { ...item, statusManual };
+      const statusNovo = obterStatusAtendimento(baseAtualizada, agoraRemarcacao);
+      if (item.statusManual === statusManual) return { ...baseAtualizada, status: statusNovo };
+      const tipo = statusManual === "Cancelado" ? "Cancelada" : statusManual === "Não compareceu" ? "Falta" : "Status alterado";
+      const comAlteracao = registrarAlteracaoAgendamento(baseAtualizada, { tipo, origem: "Dono", statusAnterior, statusNovo });
+      return { ...comAlteracao, status: statusNovo };
+    });
     setAgendamentos(novaLista);
     salvarAgendamentos(novaLista);
     setAgendamentoEditarStatus(null);
@@ -350,7 +348,14 @@ export default function AgendaPage() {
   function concluirRemarcacao() {
     if (!agendamentoRemarcar || !novaData || !novoHorario) { alert("Escolha a nova data e o novo horário."); return; }
     const anterior = agendamentoRemarcar;
-    const novaLista = agendamentos.map((item) => item.id === anterior.id ? { ...item, data: novaData, hora: novoHorario } : item);
+    const novaLista = agendamentos.map((item) => {
+      if (item.id !== anterior.id) return item;
+      const atualizado = registrarAlteracaoAgendamento(
+        { ...item, data: novaData, hora: novoHorario },
+        { tipo: "Remarcada", origem: "Dono", dataAnterior: item.data, horaAnterior: item.hora, dataNova: novaData, horaNova: novoHorario }
+      );
+      return { ...atualizado, status: obterStatusAtendimento(atualizado, agoraRemarcacao) };
+    });
     setAgendamentos(novaLista);
     salvarAgendamentos(novaLista);
     setDiaSelecionado(novaData);

@@ -3,6 +3,7 @@ export const SERVICOS_KEY = "ph10:servicos";
 export const COMBOS_KEY = "ph10:combos";
 export const AGENDA_CONFIG_KEY = "ph10:configuracao-agenda";
 export const BLOQUEIOS_KEY = "ph10:bloqueios";
+export const CLIENTES_KEY = "ph10:clientes";
 
 export type Servico = { id: number; nome: string; duracao: string; valor: number; status: "Ativo" | "Inativo" };
 export type Combo = { id: number; nome: string; duracao: string; servicosIds: number[]; valor: number; descontoPercentual?: number; status: "Ativo" | "Inativo" };
@@ -10,6 +11,26 @@ export type DiaFuncionamento = { id: string; nome: string; curto: string; ativo:
 export type ConfigAgenda = { intervalo: "15" | "30" | "45" | "60"; antecedenciaMinima: "1" | "2" | "4" | "24"; diasParaAgendar: "7" | "15" | "30" };
 export type ConfiguracaoAgenda = { diasFuncionamento: DiaFuncionamento[]; configAgenda: ConfigAgenda };
 export type BloqueioAgenda = { id: number; data: string; diaInteiro: boolean; inicio: string; fim: string; motivo: string };
+export type Cliente = {
+  id: number;
+  nome: string;
+  whatsapp: string;
+  email?: string;
+  criadoEm: string;
+  atualizadoEm: string;
+};
+export type AlteracaoAgendamento = {
+  id: string;
+  tipo: "Criada" | "Remarcada" | "Cancelada" | "Falta" | "Status alterado";
+  origem: "Cliente" | "Dono";
+  realizadaEm: string;
+  dataAnterior?: string;
+  horaAnterior?: string;
+  dataNova?: string;
+  horaNova?: string;
+  statusAnterior?: string;
+  statusNovo?: string;
+};
 
 export type Agendamento = {
   id: number;
@@ -20,6 +41,8 @@ export type Agendamento = {
   valor: number;
   whatsapp: string;
   duracaoMinutos?: number;
+  codigo?: string;
+  historicoAlteracoes?: AlteracaoAgendamento[];
   statusManual?: "Cancelado" | "Não compareceu";
 };
 
@@ -55,6 +78,18 @@ export function salvarAgendamentos(agendamentos: Agendamento[]) {
   window.dispatchEvent(new Event("ph10:agendamentos-atualizados"));
 }
 
+export function registrarAlteracaoAgendamento(
+  agendamento: Agendamento,
+  alteracao: Omit<AlteracaoAgendamento, "id" | "realizadaEm">
+) {
+  const novaAlteracao: AlteracaoAgendamento = {
+    ...alteracao,
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    realizadaEm: new Date().toISOString(),
+  };
+  return { ...agendamento, historicoAlteracoes: [...(agendamento.historicoAlteracoes ?? []), novaAlteracao] };
+}
+
 function carregarLista<T>(chave: string): T[] {
   if (typeof window === "undefined") return [];
   try { const dados = localStorage.getItem(chave); return dados ? JSON.parse(dados) : []; } catch { return []; }
@@ -63,9 +98,38 @@ function carregarLista<T>(chave: string): T[] {
 export const carregarServicos = () => carregarLista<Servico>(SERVICOS_KEY);
 export const carregarCombos = () => carregarLista<Combo>(COMBOS_KEY);
 export const carregarBloqueios = () => carregarLista<BloqueioAgenda>(BLOQUEIOS_KEY);
+export const carregarClientes = () => carregarLista<Cliente>(CLIENTES_KEY);
 export function salvarServicos(servicos: Servico[]) { localStorage.setItem(SERVICOS_KEY, JSON.stringify(servicos)); }
 export function salvarCombos(combos: Combo[]) { localStorage.setItem(COMBOS_KEY, JSON.stringify(combos)); }
 export function salvarBloqueios(bloqueios: BloqueioAgenda[]) { localStorage.setItem(BLOQUEIOS_KEY, JSON.stringify(bloqueios)); }
+export function salvarClientes(clientes: Cliente[]) {
+  localStorage.setItem(CLIENTES_KEY, JSON.stringify(clientes));
+  window.dispatchEvent(new Event("ph10:clientes-atualizados"));
+}
+
+export function normalizarWhatsapp(whatsapp: string) {
+  const digitos = whatsapp.replace(/\D/g, "");
+  if (digitos.startsWith("55")) return digitos;
+  if (digitos.startsWith("21")) return `55${digitos}`;
+  return `5521${digitos}`;
+}
+
+export function cadastrarOuAtualizarCliente(nome: string, whatsapp: string) {
+  const clientes = carregarClientes();
+  const numero = normalizarWhatsapp(whatsapp);
+  const agora = new Date().toISOString();
+  const existente = clientes.find((cliente) => normalizarWhatsapp(cliente.whatsapp) === numero);
+
+  if (existente) {
+    const atualizado = { ...existente, nome: nome.trim(), whatsapp: numero, atualizadoEm: agora };
+    salvarClientes(clientes.map((cliente) => cliente.id === existente.id ? atualizado : cliente));
+    return atualizado;
+  }
+
+  const novo: Cliente = { id: Date.now(), nome: nome.trim(), whatsapp: numero, criadoEm: agora, atualizadoEm: agora };
+  salvarClientes([novo, ...clientes]);
+  return novo;
+}
 export function carregarConfiguracaoAgenda(): ConfiguracaoAgenda | null {
   if (typeof window === "undefined") return null;
   try { const dados = localStorage.getItem(AGENDA_CONFIG_KEY); return dados ? JSON.parse(dados) : null; } catch { return null; }

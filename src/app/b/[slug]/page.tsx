@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import ClientReservationLookup from "@/components/booking/ClientReservationLookup";
 import {
   Agendamento,
   BloqueioAgenda,
@@ -12,12 +13,16 @@ import {
   carregarCombos,
   carregarConfiguracaoAgenda,
   carregarServicos,
+  cadastrarOuAtualizarCliente,
   proximosDias,
+  registrarAlteracaoAgendamento,
   reservaEstaAtiva,
   salvarAgendamentos,
 } from "@/lib/barber-storage";
 
 const idsDosDias = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
+// Temporário: futuramente virá do módulo Configurações.
+const whatsappPH10 = "5521994073006";
 
 function minutos(hora: string) { const [h, m] = hora.split(":").map(Number); return h * 60 + m; }
 function horaFormatada(total: number) { return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`; }
@@ -33,6 +38,14 @@ function somenteLetras(valor: string) {
   return valor.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ\s]/g, "").replace(/\s{2,}/g, " ");
 }
 function somenteDigitos(valor: string) { return valor.replace(/\D/g, "").slice(0, 9); }
+function gerarCodigoReserva(agendamentos: Agendamento[]) {
+  const caracteres = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let codigo = "";
+  do {
+    codigo = `PH10-${Array.from({ length: 6 }, () => caracteres[Math.floor(Math.random() * caracteres.length)]).join("")}`;
+  } while (agendamentos.some((item) => item.codigo === codigo));
+  return codigo;
+}
 
 export default function PaginaCliente() {
   const [servicoId, setServicoId] = useState<number | null>(null);
@@ -47,7 +60,9 @@ export default function PaginaCliente() {
   const [configuracao, setConfiguracao] = useState<ConfiguracaoAgenda | null>(null);
   const [carregado, setCarregado] = useState(false);
   const [agora, setAgora] = useState(0);
-  const [enviado, setEnviado] = useState(false);
+  const [reservaConcluida, setReservaConcluida] = useState<Agendamento | null>(null);
+  const [codigoCopiado, setCodigoCopiado] = useState(false);
+  const [reservaExistenteAviso, setReservaExistenteAviso] = useState<Agendamento | null>(null);
 
   useEffect(() => {
     function carregar() {
@@ -130,7 +145,7 @@ export default function PaginaCliente() {
     const numeroCompletoCliente = `5521${whatsapp}`;
     const reservaExistente = listaAtual.find((item) => item.whatsapp.replace(/\D/g, "").endsWith(whatsapp) && reservaEstaAtiva(item, agora));
     if (reservaExistente) {
-      alert(`Você já possui uma reserva em ${reservaExistente.data.split("-").reverse().join("/")} às ${reservaExistente.hora}. Para remarcar, entre em contato com a PH10.`);
+      setReservaExistenteAviso(reservaExistente);
       return;
     }
     const inicioPretendidoBloqueio = minutos(horario);
@@ -156,35 +171,101 @@ export default function PaginaCliente() {
       return;
     }
 
-    const novo: Agendamento = {
+    const novo = registrarAlteracaoAgendamento({
       id: Date.now(), data: dia, hora: horario, cliente: nome.trim(),
-      servico: servico.nome, valor: servico.valor, whatsapp: numeroCompletoCliente, duracaoMinutos: duracaoSelecionada,
-    };
+      servico: servico.nome, valor: servico.valor, whatsapp: numeroCompletoCliente,
+      duracaoMinutos: duracaoSelecionada, codigo: gerarCodigoReserva(listaAtual),
+    }, { tipo: "Criada", origem: "Cliente", dataNova: dia, horaNova: horario });
     const novaLista = [...listaAtual, novo];
     salvarAgendamentos(novaLista);
+    cadastrarOuAtualizarCliente(novo.cliente, novo.whatsapp);
     setAgendamentos(novaLista);
-    setEnviado(true);
+    setReservaConcluida(novo);
+    setCodigoCopiado(false);
+  }
+
+  async function copiarCodigo() {
+    if (!reservaConcluida?.codigo) return;
+    await navigator.clipboard.writeText(reservaConcluida.codigo);
+    setCodigoCopiado(true);
+  }
+
+  function linkConfirmacaoWhatsapp(reserva: Agendamento) {
+    const mensagem = encodeURIComponent(
+      `Olá, PH10! Acabei de fazer uma reserva.\n\n` +
+      `Nome: ${reserva.cliente}\n` +
+      `Serviço: ${reserva.servico}\n` +
+      `Data: ${reserva.data.split("-").reverse().join("/")}\n` +
+      `Horário: ${reserva.hora}\n` +
+      `Valor: ${dinheiro(reserva.valor)}\n` +
+      `Código: ${reserva.codigo}`
+    );
+    return `https://wa.me/${whatsappPH10}?text=${mensagem}`;
+  }
+
+  function linkPedidoRemarcacao(reserva: Agendamento) {
+    const mensagem = encodeURIComponent(
+      `Olá, PH10! Eu já tenho uma reserva para ${reserva.data.split("-").reverse().join("/")} às ${reserva.hora} e preciso conversar sobre uma remarcação.${reserva.codigo ? `\nCódigo: ${reserva.codigo}` : ""}`
+    );
+    return `https://wa.me/${whatsappPH10}?text=${mensagem}`;
   }
 
   return (
     <main className="min-h-screen bg-[#24211e] text-[#f3ead8]">
       <div className="mx-auto w-full max-w-md px-4 py-5 lg:max-w-4xl">
-        <header className="hero-panel">
-          <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-400">PH10</p>
-          <h1 className="mt-2 text-3xl font-black">Barbearia PH10</h1>
-          <p className="mt-2 text-sm text-neutral-400">Escolha o serviço, o dia e um horário disponível.</p>
-        </header>
+        {!reservaConcluida && (
+          <header className="hero-panel">
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-400">PH10</p>
+            <h1 className="mt-2 text-3xl font-black">Barbearia PH10</h1>
+            <p className="mt-2 text-sm text-neutral-400">Escolha o serviço, o dia e um horário disponível.</p>
+            <ClientReservationLookup
+              agendamentos={agendamentos}
+              bloqueios={bloqueios}
+              configuracao={configuracao}
+              whatsappPH10={whatsappPH10}
+              onAtualizar={setAgendamentos}
+            />
+          </header>
+        )}
 
-        {enviado ? (
-          <section className="mt-5 rounded-[2rem] bg-green-500/10 p-6 text-center">
-            <p className="text-4xl">✅</p>
-            <h2 className="mt-3 text-2xl font-black">Agendamento realizado</h2>
-            <p className="mt-2 text-sm text-neutral-300">Seu horário já está reservado na agenda da PH10.</p>
-            <div className="mt-5 rounded-3xl bg-neutral-900 p-4 text-left">
-              <p className="font-bold">{nome}</p>
-              <p className="text-sm text-neutral-400">{servico?.nome} • {dia.split("-").reverse().join("/")} • {horario}</p>
+        {reservaConcluida ? (
+          <section className="rounded-[2rem] bg-green-500/10 p-6 text-center">
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full border border-green-400/30 bg-green-400/10 text-green-300 shadow-[0_0_40px_rgba(74,222,128,.12)]">
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m5 12 4 4L19 6" />
+              </svg>
             </div>
-            <button onClick={() => { setEnviado(false); setServicoId(null); setHorario(""); setNome(""); setWhatsapp(""); }} className="mt-5 w-full rounded-2xl bg-amber-400 py-4 text-sm font-black text-neutral-950">Fazer outro agendamento</button>
+            <h2 className="mt-3 text-2xl font-black">Reserva realizada</h2>
+            <p className="mt-2 text-sm text-neutral-300">Seu horário já está reservado na agenda da PH10.</p>
+            <div className="mt-5 rounded-3xl bg-neutral-900 p-5 text-left">
+              <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[.18em] text-neutral-400">Código da reserva</p>
+                  <p className="mt-1 text-xl font-black text-amber-400">{reservaConcluida.codigo}</p>
+                </div>
+                <button type="button" onClick={copiarCodigo} className="shrink-0 rounded-xl bg-white/10 px-3 py-2 text-xs font-black">
+                  {codigoCopiado ? "Copiado!" : "Copiar"}
+                </button>
+              </div>
+              <dl className="mt-4 space-y-2 text-sm">
+                <div className="flex justify-between gap-4"><dt className="text-neutral-400">Cliente</dt><dd className="text-right font-bold">{reservaConcluida.cliente}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-neutral-400">Serviço</dt><dd className="text-right font-bold">{reservaConcluida.servico}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-neutral-400">Data</dt><dd className="text-right font-bold">{reservaConcluida.data.split("-").reverse().join("/")}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-neutral-400">Horário</dt><dd className="text-right font-bold">{reservaConcluida.hora}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-neutral-400">Valor</dt><dd className="text-right font-bold">{dinheiro(reservaConcluida.valor)}</dd></div>
+              </dl>
+            </div>
+            <p className="mt-4 text-xs leading-relaxed text-neutral-400">Guarde esse código. Ele identifica sua reserva caso você precise falar com a PH10.</p>
+            <a
+              href={linkConfirmacaoWhatsapp(reservaConcluida)}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-5 flex w-full items-center justify-center rounded-2xl bg-green-500 px-4 py-4 text-sm font-black text-white"
+            >
+              Enviar confirmação ao PH10
+            </a>
+            <p className="mt-2 text-xs text-neutral-400">A mensagem será aberta pronta. Revise e toque em enviar no WhatsApp.</p>
+            <button onClick={() => { setReservaConcluida(null); setServicoId(null); setHorario(""); setNome(""); setWhatsapp(""); }} className="mt-4 w-full rounded-2xl bg-white/10 py-4 text-sm font-black">Voltar ao início</button>
           </section>
         ) : (
           <>
@@ -211,6 +292,26 @@ export default function PaginaCliente() {
           </>
         )}
       </div>
+
+      {reservaExistenteAviso && (
+        <div onClick={() => setReservaExistenteAviso(null)} className="safe-modal-shell fixed inset-0 z-[300] flex items-center justify-center bg-black/75 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="reserva-existente-titulo" onClick={(event) => event.stopPropagation()} className="w-full max-w-sm rounded-[2rem] border border-white/10 bg-neutral-900 p-6 text-center text-white shadow-2xl">
+            <div className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-amber-400/25 bg-amber-400/10 text-2xl font-black text-amber-400">!</div>
+            <h2 id="reserva-existente-titulo" className="mt-4 text-2xl font-black">Você já tem uma reserva</h2>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-400">Encontramos um horário ativo para este WhatsApp.</p>
+            <div className="mt-5 rounded-2xl bg-neutral-950 p-4 text-left">
+              <div className="flex justify-between gap-4"><span className="text-sm text-neutral-400">Data</span><strong>{reservaExistenteAviso.data.split("-").reverse().join("/")}</strong></div>
+              <div className="mt-2 flex justify-between gap-4"><span className="text-sm text-neutral-400">Horário</span><strong>{reservaExistenteAviso.hora}</strong></div>
+              {reservaExistenteAviso.codigo && <p className="mt-3 border-t border-white/10 pt-3 text-center font-mono text-xs font-bold tracking-wider text-neutral-500">{reservaExistenteAviso.codigo}</p>}
+            </div>
+            <p className="mt-4 text-xs leading-relaxed text-neutral-400">Para trocar o horário, fale com a PH10 antes de fazer uma nova reserva.</p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button type="button" onClick={() => setReservaExistenteAviso(null)} className="rounded-2xl bg-white/10 px-4 py-4 text-sm font-black">Entendi</button>
+              <a href={linkPedidoRemarcacao(reservaExistenteAviso)} target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-2xl bg-green-500 px-4 py-4 text-sm font-black text-white">Falar com a PH10</a>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
