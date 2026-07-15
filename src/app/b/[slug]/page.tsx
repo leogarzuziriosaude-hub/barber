@@ -33,7 +33,7 @@ function somenteLetras(valor: string) {
 }
 function somenteDigitos(valor: string) { return valor.replace(/\D/g, "").slice(0, 9); }
 export default function PaginaCliente() {
-  const [servicoId, setServicoId] = useState<string | null>(null);
+  const [selecoes, setSelecoes] = useState<string[]>([]);
   const [dia, setDia] = useState(() => proximosDias(1)[0].data);
   const [horario, setHorario] = useState("");
   const [nome, setNome] = useState("");
@@ -102,7 +102,14 @@ export default function PaginaCliente() {
     ...servicos.map((item) => ({ ...item, id: `servico:${item.id}` })),
     ...combos.map((combo) => ({ id: `combo:${combo.id}`, nome: combo.nome, duracao: combo.duracao, valor: combo.valor, status: "Ativo" as const })),
   ];
-  const servico = opcoesAgendamento.find((item) => item.id === servicoId);
+  const itensSelecionados = opcoesAgendamento.filter((item) => selecoes.includes(item.id));
+  const servico = itensSelecionados.length > 0 ? {
+    id: itensSelecionados.map((item) => item.id).join(","),
+    nome: itensSelecionados.map((item) => item.nome).join(" + "),
+    duracao: String(itensSelecionados.reduce((total, item) => total + Number(item.duracao), 0)),
+    valor: itensSelecionados.reduce((total, item) => total + item.valor, 0),
+    status: "Ativo" as const,
+  } : undefined;
   const whatsappPH10 = perfil.whatsapp;
   const duracaoSelecionada = Number(servico?.duracao.replace(/\D/g, "") || 0);
   const funcionamentoHoje = useMemo(() => {
@@ -154,9 +161,18 @@ export default function PaginaCliente() {
     setHorario("");
   }
 
+  function alternarSelecao(id: string) {
+    setSelecoes((atuais) => {
+      if (id.startsWith("combo:")) return atuais.includes(id) ? [] : [id];
+      const semCombo = atuais.filter((item) => !item.startsWith("combo:"));
+      return semCombo.includes(id) ? semCombo.filter((item) => item !== id) : [...semCombo, id];
+    });
+    setHorario("");
+  }
+
   async function agendar() {
     if (!servico || !dia || !horario || !nome.trim() || !whatsapp.trim()) {
-      setAvisoFormulario({ titulo: "Faltam algumas informações", mensagem: "Escolha o serviço, o dia e o horário e preencha seus dados para continuar." });
+      setAvisoFormulario({ titulo: "Faltam algumas informações", mensagem: "Escolha um ou mais serviços, o dia e o horário e preencha seus dados para continuar." });
       return;
     }
     if (!/^[A-Za-zÀ-ÖØ-öø-ÿ]+(?:\s+[A-Za-zÀ-ÖØ-öø-ÿ]+)*$/.test(nome.trim())) {
@@ -169,8 +185,8 @@ export default function PaginaCliente() {
     }
 
     const numeroCompletoCliente = `5521${whatsapp}`;
-    const [itemTipo, itemId] = servico.id.split(":") as ["servico" | "combo", string];
-    const resposta = await fetch("/api/public/reservas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nome: nome.trim(), whatsapp: numeroCompletoCliente, itemTipo, itemId, data: dia, hora: horario }) });
+    const itens = itensSelecionados.map((item) => { const [tipo, id] = item.id.split(":"); return { tipo, id }; });
+    const resposta = await fetch("/api/public/reservas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nome: nome.trim(), whatsapp: numeroCompletoCliente, itens, data: dia, hora: horario }) });
     const resultado = await resposta.json() as { reserva?: Agendamento; erro?: string };
     if (!resposta.ok || !resultado.reserva) {
       setHorario("");
@@ -237,7 +253,7 @@ export default function PaginaCliente() {
                 onAtualizar={setAgendamentos}
               />
             </div>
-            <p className="mt-5 text-sm text-neutral-400">Escolha o serviço, o dia e um horário disponível.</p>
+            <p className="mt-5 text-sm text-neutral-400">Escolha um ou mais serviços, o dia e um horário disponível.</p>
           </>
         )}
 
@@ -278,14 +294,14 @@ export default function PaginaCliente() {
               Enviar confirmação ao PH10
             </a>
             <p className="mt-2 text-xs text-neutral-400">A mensagem será aberta pronta. Revise e toque em enviar no WhatsApp.</p>
-            <button onClick={() => { setReservaConcluida(null); setServicoId(null); setHorario(""); setNome(""); setWhatsapp(""); }} className="mt-4 w-full rounded-2xl bg-white/10 py-4 text-sm font-black">Voltar ao início</button>
+            <button onClick={() => { setReservaConcluida(null); setSelecoes([]); setHorario(""); setNome(""); setWhatsapp(""); }} className="mt-4 w-full rounded-2xl bg-white/10 py-4 text-sm font-black">Voltar ao início</button>
           </section>
         ) : (
           <>
-            <section className="mt-3"><h2 className="text-xl font-black">Serviço</h2>
-              {servicos.length === 0 ? <div className="mt-3 rounded-3xl border border-dashed border-white/10 bg-neutral-900 p-5 text-center text-sm text-neutral-400">Nenhum serviço disponível no momento.</div> : <div className="mt-3 grid gap-3 lg:grid-cols-2">{servicos.map((item) => { const idSelecao = `servico:${item.id}`; return <button key={item.id} onClick={() => setServicoId(idSelecao)} className={`rounded-3xl border p-4 text-left ${idSelecao === servicoId ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-white/10 bg-neutral-900"}`}><div className="flex justify-between gap-3"><div><p className="font-black">{item.nome}</p><p className="text-sm opacity-70">{duracaoComUnidade(item.duracao)}</p></div><strong>{dinheiro(item.valor)}</strong></div></button>; })}</div>}
+            <section className="mt-3"><h2 className="text-xl font-black">Serviços</h2>
+              {servicos.length === 0 ? <div className="mt-3 rounded-3xl border border-dashed border-white/10 bg-neutral-900 p-5 text-center text-sm text-neutral-400">Nenhum serviço disponível no momento.</div> : <div className="mt-3 grid gap-3 lg:grid-cols-2">{servicos.map((item) => { const idSelecao = `servico:${item.id}`; return <button key={item.id} onClick={() => alternarSelecao(idSelecao)} className={`rounded-3xl border p-4 text-left ${selecoes.includes(idSelecao) ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-white/10 bg-neutral-900"}`}><div className="flex justify-between gap-3"><div><p className="font-black">{item.nome}</p><p className="text-sm opacity-70">{duracaoComUnidade(item.duracao)}</p></div><strong>{dinheiro(item.valor)}</strong></div></button>; })}</div>}
             </section>
-            {combos.length > 0 && <section className="mt-6 border-t border-white/10 pt-6"><div><p className="text-xs font-black uppercase tracking-[.2em] text-amber-400">Economize</p><h2 className="mt-1 text-xl font-black">Combos</h2></div><div className="mt-3 grid gap-3 lg:grid-cols-2">{combos.map((combo) => { const idSelecao = `combo:${combo.id}`; return <button key={combo.id} onClick={() => setServicoId(idSelecao)} className={`rounded-3xl border p-4 text-left ${idSelecao === servicoId ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-amber-400/20 bg-amber-400/5"}`}><div className="flex justify-between gap-3"><div><p className="font-black">{combo.nome}</p><p className="text-sm opacity-70">{duracaoComUnidade(combo.duracao)}</p></div><strong>{dinheiro(combo.valor)}</strong></div><p className="mt-3 text-xs font-bold opacity-70">Combo especial</p></button>; })}</div></section>}
+            {combos.length > 0 && <section className="mt-6 border-t border-white/10 pt-6"><div><p className="text-xs font-black uppercase tracking-[.2em] text-amber-400">Economize</p><h2 className="mt-1 text-xl font-black">Combos</h2></div><div className="mt-3 grid gap-3 lg:grid-cols-2">{combos.map((combo) => { const idSelecao = `combo:${combo.id}`; return <button key={combo.id} onClick={() => alternarSelecao(idSelecao)} className={`rounded-3xl border p-4 text-left ${selecoes.includes(idSelecao) ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-amber-400/20 bg-amber-400/5"}`}><div className="flex justify-between gap-3"><div><p className="font-black">{combo.nome}</p><p className="text-sm opacity-70">{duracaoComUnidade(combo.duracao)}</p></div><strong>{dinheiro(combo.valor)}</strong></div><p className="mt-3 text-xs font-bold opacity-70">Combo especial</p></button>; })}</div></section>}
             <section className="mt-6"><h2 className="text-xl font-black">Dia</h2>
               <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2 lg:mx-0 lg:px-0">{dias.map((item) => <button key={item.data} onClick={() => selecionarDia(item.data)} className={`min-w-16 rounded-3xl border p-3 text-center ${item.data === dia ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-white/10 bg-neutral-900"}`}><span className="block text-xs font-bold capitalize">{item.semana}</span><strong className="block text-2xl">{item.dia}</strong></button>)}</div>
             </section>
