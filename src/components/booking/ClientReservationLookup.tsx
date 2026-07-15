@@ -9,9 +9,7 @@ import {
   normalizarWhatsapp,
   obterStatusAtendimento,
   proximosDias,
-  registrarAlteracaoAgendamento,
   reservaEstaAtiva,
-  salvarAgendamentos,
 } from "@/lib/barber-storage";
 import { intervalosSeSobrepoem } from "@/lib/agenda-rules.mjs";
 
@@ -104,24 +102,25 @@ export default function ClientReservationLookup({ agendamentos, bloqueios, confi
     setSucesso(null);
   }
 
-  function buscarReserva() {
+  async function buscarReserva() {
     const codigoNormalizado = codigoComparavel(codigo);
     if (codigoNormalizado.length < 10 || !/^9\d{8}$/.test(whatsapp)) {
       setErro("Informe o código completo e os 9 dígitos do WhatsApp.");
       return;
     }
     const numero = normalizarWhatsapp(`5521${whatsapp}`);
-    const encontrada = agendamentos.find((item) => item.codigo && codigoComparavel(item.codigo) === codigoNormalizado && normalizarWhatsapp(item.whatsapp) === numero);
-    if (!encontrada) {
+    const resposta = await fetch(`/api/public/reservas?codigo=${encodeURIComponent(codigo.toUpperCase())}&whatsapp=${numero}`, { cache: "no-store" });
+    const resultado = await resposta.json() as { reserva?: Agendamento };
+    if (!resposta.ok || !resultado.reserva) {
       setErro("Não encontramos uma reserva com esses dados.");
       return;
     }
-    setReserva(encontrada);
+    setReserva(resultado.reserva);
     setErro("");
     setSucesso(null);
   }
 
-  function executarConfirmacao() {
+  async function executarConfirmacao() {
     if (!reserva || !confirmacao) return;
     if (new Date(`${reserva.data}T${reserva.hora}:00`).getTime() - Date.now() < DUAS_HORAS) {
       setConfirmacao(null);
@@ -129,23 +128,13 @@ export default function ClientReservationLookup({ agendamentos, bloqueios, confi
       return;
     }
 
-    let atualizada: Agendamento;
-    if (confirmacao === "cancelar") {
-      atualizada = registrarAlteracaoAgendamento(
-        { ...reserva, statusManual: "Cancelado" },
-        { tipo: "Cancelada", origem: "Cliente", statusAnterior: obterStatusAtendimento(reserva, Date.now()), statusNovo: "Cancelado" }
-      );
-      setSucesso("cancelada");
-    } else {
-      if (!novaData || !novoHorario) return;
-      atualizada = registrarAlteracaoAgendamento(
-        { ...reserva, data: novaData, hora: novoHorario, statusManual: undefined },
-        { tipo: "Remarcada", origem: "Cliente", dataAnterior: reserva.data, horaAnterior: reserva.hora, dataNova: novaData, horaNova: novoHorario }
-      );
-      setSucesso("remarcada");
-    }
+    if (confirmacao === "remarcar" && (!novaData || !novoHorario)) return;
+    const resposta = await fetch("/api/public/reservas", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codigo: reserva.codigo, whatsapp: reserva.whatsapp, acao: confirmacao, data: novaData, hora: novoHorario }) });
+    const resultado = await resposta.json() as { reserva?: Agendamento };
+    if (!resposta.ok || !resultado.reserva) { setConfirmacao(null); setErro("Não foi possível alterar a reserva."); return; }
+    const atualizada = resultado.reserva;
+    setSucesso(confirmacao === "cancelar" ? "cancelada" : "remarcada");
     const novaLista = agendamentos.map((item) => item.id === reserva.id ? atualizada : item);
-    salvarAgendamentos(novaLista);
     onAtualizar(novaLista);
     setReserva(atualizada);
     setModoRemarcar(false);

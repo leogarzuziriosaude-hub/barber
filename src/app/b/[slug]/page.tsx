@@ -10,17 +10,8 @@ import {
   ConfiguracaoAgenda,
   PerfilBarbearia,
   Servico,
-  carregarAgendamentos,
-  carregarBloqueios,
-  carregarCombos,
-  carregarConfiguracaoAgenda,
-  carregarPerfil,
-  carregarServicos,
-  cadastrarOuAtualizarCliente,
   proximosDias,
-  registrarAlteracaoAgendamento,
   reservaEstaAtiva,
-  salvarAgendamentos,
   perfilInicial,
 } from "@/lib/barber-storage";
 import { intervalosSeSobrepoem } from "@/lib/agenda-rules.mjs";
@@ -41,17 +32,8 @@ function somenteLetras(valor: string) {
   return valor.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ\s]/g, "").replace(/\s{2,}/g, " ");
 }
 function somenteDigitos(valor: string) { return valor.replace(/\D/g, "").slice(0, 9); }
-function gerarCodigoReserva(agendamentos: Agendamento[]) {
-  const caracteres = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let codigo = "";
-  do {
-    codigo = `PH10-${Array.from({ length: 6 }, () => caracteres[Math.floor(Math.random() * caracteres.length)]).join("")}`;
-  } while (agendamentos.some((item) => item.codigo === codigo));
-  return codigo;
-}
-
 export default function PaginaCliente() {
-  const [servicoId, setServicoId] = useState<number | null>(null);
+  const [servicoId, setServicoId] = useState<string | null>(null);
   const [dia, setDia] = useState(() => proximosDias(1)[0].data);
   const [horario, setHorario] = useState("");
   const [nome, setNome] = useState("");
@@ -70,39 +52,55 @@ export default function PaginaCliente() {
   const [avisoFormulario, setAvisoFormulario] = useState<{ titulo: string; mensagem: string } | null>(null);
 
   useEffect(() => {
-    function carregar() {
-      setAgendamentos(carregarAgendamentos());
-      setBloqueios(carregarBloqueios());
-      const servicosAtivos = carregarServicos().filter((item) => item.status === "Ativo");
-      const combosAtivos = carregarCombos().filter((item) => item.status === "Ativo");
-      setServicos(servicosAtivos);
-      setCombos(combosAtivos);
-      setConfiguracao(carregarConfiguracaoAgenda());
-      setPerfil(carregarPerfil());
+    let ativo = true;
+    async function carregar() {
       setAgora(Date.now());
-      setCarregado(true);
+      try {
+        const [respostaConfiguracao, respostaCatalogo, respostaDisponibilidade] = await Promise.all([
+          fetch("/api/public/configuracao", { cache: "no-store" }),
+          fetch("/api/public/catalogo", { cache: "no-store" }),
+          fetch("/api/public/disponibilidade", { cache: "no-store" }),
+        ]);
+        if (!respostaConfiguracao.ok || !respostaCatalogo.ok || !respostaDisponibilidade.ok) throw new Error("Dados indisponíveis");
+        const dados = await respostaConfiguracao.json() as { perfil: PerfilBarbearia; configuracao: ConfiguracaoAgenda };
+        const catalogo = await respostaCatalogo.json() as { servicos: Servico[]; combos: Combo[] };
+        const disponibilidade = await respostaDisponibilidade.json() as { agendamentos: Array<Pick<Agendamento, "id" | "data" | "hora" | "duracaoMinutos">>; bloqueios: BloqueioAgenda[] };
+        if (ativo) {
+          setConfiguracao(dados.configuracao);
+          setPerfil(dados.perfil);
+          setServicos(catalogo.servicos);
+          setCombos(catalogo.combos);
+          setAgendamentos(disponibilidade.agendamentos.map((item) => ({ ...item, cliente: "", servico: "", valor: 0, whatsapp: "" })));
+          setBloqueios(disponibilidade.bloqueios);
+        }
+      } catch {
+        if (ativo) setAvisoFormulario({ titulo: "Página temporariamente indisponível", mensagem: "Não foi possível carregar os dados da barbearia. Tente novamente em instantes." });
+      } finally {
+        if (ativo) setCarregado(true);
+      }
     }
     carregar();
     const eventos = [
       "storage",
       "ph10:agendamentos-atualizados",
       "ph10:bloqueios-atualizados",
-      "ph10:servicos-atualizados",
-      "ph10:combos-atualizados",
       "ph10:agenda-config-atualizada",
       "ph10:perfil-atualizado",
     ];
     eventos.forEach((evento) => window.addEventListener(evento, carregar));
+    window.addEventListener("focus", carregar);
     const intervalo = window.setInterval(() => setAgora(Date.now()), 30_000);
     return () => {
+      ativo = false;
       eventos.forEach((evento) => window.removeEventListener(evento, carregar));
+      window.removeEventListener("focus", carregar);
       window.clearInterval(intervalo);
     };
   }, []);
 
   const opcoesAgendamento: Servico[] = [
-    ...servicos,
-    ...combos.map((combo) => ({ id: -combo.id, nome: combo.nome, duracao: combo.duracao, valor: combo.valor, status: "Ativo" as const })),
+    ...servicos.map((item) => ({ ...item, id: `servico:${item.id}` })),
+    ...combos.map((combo) => ({ id: `combo:${combo.id}`, nome: combo.nome, duracao: combo.duracao, valor: combo.valor, status: "Ativo" as const })),
   ];
   const servico = opcoesAgendamento.find((item) => item.id === servicoId);
   const whatsappPH10 = perfil.whatsapp;
@@ -156,7 +154,7 @@ export default function PaginaCliente() {
     setHorario("");
   }
 
-  function agendar() {
+  async function agendar() {
     if (!servico || !dia || !horario || !nome.trim() || !whatsapp.trim()) {
       setAvisoFormulario({ titulo: "Faltam algumas informações", mensagem: "Escolha o serviço, o dia e o horário e preencha seus dados para continuar." });
       return;
@@ -170,57 +168,17 @@ export default function PaginaCliente() {
       return;
     }
 
-    const listaAtual = carregarAgendamentos();
-    const agoraAtual = Date.now();
-    const configuracaoAtual = carregarConfiguracaoAgenda();
-    const bloqueiosAtuais = carregarBloqueios();
-    const dataSelecionada = new Date(`${dia}T12:00:00`);
-    const expedienteAtual = configuracaoAtual?.diasFuncionamento.find((item) => item.id === idsDosDias[dataSelecionada.getDay()]);
-    const inicioPretendido = minutos(horario);
-    const fimPretendido = inicioPretendido + duracaoSelecionada;
-    const instantePretendido = new Date(`${dia}T${horario}:00`).getTime();
-    const antecedencia = Number(configuracaoAtual?.configAgenda.antecedenciaMinima ?? 1) * 60 * 60 * 1000;
-    const sobrepoePausaAtual = Boolean(expedienteAtual?.temPausa) && intervalosSeSobrepoem(inicioPretendido, fimPretendido, minutos(expedienteAtual?.pausaInicio ?? "00:00"), minutos(expedienteAtual?.pausaFim ?? "00:00"));
-    const sobrepoeBloqueioAtual = bloqueiosAtuais.some((bloqueio) => bloqueio.data === dia && intervalosSeSobrepoem(inicioPretendido, fimPretendido, bloqueio.diaInteiro ? 0 : minutos(bloqueio.inicio), bloqueio.diaInteiro ? 24 * 60 : minutos(bloqueio.fim)));
-    const foraDoExpediente = !expedienteAtual?.ativo || inicioPretendido < minutos(expedienteAtual.abertura) || fimPretendido > minutos(expedienteAtual.fechamento);
-    if (!configuracaoAtual || foraDoExpediente || sobrepoePausaAtual || sobrepoeBloqueioAtual || instantePretendido < agoraAtual + antecedencia) {
-      setConfiguracao(configuracaoAtual);
-      setBloqueios(bloqueiosAtuais);
-      setAgora(agoraAtual);
-      setHorario("");
-      setAvisoFormulario({ titulo: "Horário indisponível", mensagem: "A disponibilidade desse horário mudou. Escolha uma nova opção para continuar." });
-      return;
-    }
     const numeroCompletoCliente = `5521${whatsapp}`;
-    const reservaExistente = listaAtual.find((item) => item.whatsapp.replace(/\D/g, "").endsWith(whatsapp) && reservaEstaAtiva(item, agoraAtual));
-    if (reservaExistente) {
-      setReservaExistenteAviso(reservaExistente);
-      return;
-    }
-    const intervaloPadrao = Number(configuracaoAtual.configAgenda.intervalo);
-    const existeConflito = listaAtual.some((item) => {
-      if (item.data !== dia || !reservaEstaAtiva(item, agoraAtual)) return false;
-      const inicioReserva = minutos(item.hora);
-      const fimReserva = inicioReserva + (item.duracaoMinutos ?? intervaloPadrao);
-      return intervalosSeSobrepoem(inicioPretendido, fimPretendido, inicioReserva, fimReserva);
-    });
-    if (existeConflito) {
-      setAgendamentos(listaAtual);
+    const [itemTipo, itemId] = servico.id.split(":") as ["servico" | "combo", string];
+    const resposta = await fetch("/api/public/reservas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nome: nome.trim(), whatsapp: numeroCompletoCliente, itemTipo, itemId, data: dia, hora: horario }) });
+    const resultado = await resposta.json() as { reserva?: Agendamento; erro?: string };
+    if (!resposta.ok || !resultado.reserva) {
       setHorario("");
-      setAvisoFormulario({ titulo: "Horário ocupado", mensagem: "Esse horário acabou de ser reservado por outra pessoa. Escolha outro." });
+      setAvisoFormulario({ titulo: "Não foi possível reservar", mensagem: resultado.erro ?? "A disponibilidade mudou. Escolha outro horário." });
       return;
     }
-
-    const novo = registrarAlteracaoAgendamento({
-      id: Date.now(), data: dia, hora: horario, cliente: nome.trim(),
-      servico: servico.nome, valor: servico.valor, whatsapp: numeroCompletoCliente,
-      duracaoMinutos: duracaoSelecionada, codigo: gerarCodigoReserva(listaAtual),
-    }, { tipo: "Criada", origem: "Cliente", dataNova: dia, horaNova: horario });
-    const novaLista = [...listaAtual, novo];
-    salvarAgendamentos(novaLista);
-    cadastrarOuAtualizarCliente(novo.cliente, novo.whatsapp);
-    setAgendamentos(novaLista);
-    setReservaConcluida(novo);
+    setAgendamentos((lista) => [...lista, resultado.reserva!]);
+    setReservaConcluida(resultado.reserva);
     setCodigoCopiado(false);
   }
 
@@ -325,9 +283,9 @@ export default function PaginaCliente() {
         ) : (
           <>
             <section className="mt-3"><h2 className="text-xl font-black">Serviço</h2>
-              {servicos.length === 0 ? <div className="mt-3 rounded-3xl border border-dashed border-white/10 bg-neutral-900 p-5 text-center text-sm text-neutral-400">Nenhum serviço disponível no momento.</div> : <div className="mt-3 grid gap-3 lg:grid-cols-2">{servicos.map((item) => <button key={item.id} onClick={() => setServicoId(item.id)} className={`rounded-3xl border p-4 text-left ${item.id === servicoId ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-white/10 bg-neutral-900"}`}><div className="flex justify-between gap-3"><div><p className="font-black">{item.nome}</p><p className="text-sm opacity-70">{duracaoComUnidade(item.duracao)}</p></div><strong>{dinheiro(item.valor)}</strong></div></button>)}</div>}
+              {servicos.length === 0 ? <div className="mt-3 rounded-3xl border border-dashed border-white/10 bg-neutral-900 p-5 text-center text-sm text-neutral-400">Nenhum serviço disponível no momento.</div> : <div className="mt-3 grid gap-3 lg:grid-cols-2">{servicos.map((item) => { const idSelecao = `servico:${item.id}`; return <button key={item.id} onClick={() => setServicoId(idSelecao)} className={`rounded-3xl border p-4 text-left ${idSelecao === servicoId ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-white/10 bg-neutral-900"}`}><div className="flex justify-between gap-3"><div><p className="font-black">{item.nome}</p><p className="text-sm opacity-70">{duracaoComUnidade(item.duracao)}</p></div><strong>{dinheiro(item.valor)}</strong></div></button>; })}</div>}
             </section>
-            {combos.length > 0 && <section className="mt-6 border-t border-white/10 pt-6"><div><p className="text-xs font-black uppercase tracking-[.2em] text-amber-400">Economize</p><h2 className="mt-1 text-xl font-black">Combos</h2></div><div className="mt-3 grid gap-3 lg:grid-cols-2">{combos.map((combo) => { const idSelecao = -combo.id; return <button key={combo.id} onClick={() => setServicoId(idSelecao)} className={`rounded-3xl border p-4 text-left ${idSelecao === servicoId ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-amber-400/20 bg-amber-400/5"}`}><div className="flex justify-between gap-3"><div><p className="font-black">{combo.nome}</p><p className="text-sm opacity-70">{duracaoComUnidade(combo.duracao)}</p></div><strong>{dinheiro(combo.valor)}</strong></div><p className="mt-3 text-xs font-bold opacity-70">Combo especial</p></button>; })}</div></section>}
+            {combos.length > 0 && <section className="mt-6 border-t border-white/10 pt-6"><div><p className="text-xs font-black uppercase tracking-[.2em] text-amber-400">Economize</p><h2 className="mt-1 text-xl font-black">Combos</h2></div><div className="mt-3 grid gap-3 lg:grid-cols-2">{combos.map((combo) => { const idSelecao = `combo:${combo.id}`; return <button key={combo.id} onClick={() => setServicoId(idSelecao)} className={`rounded-3xl border p-4 text-left ${idSelecao === servicoId ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-amber-400/20 bg-amber-400/5"}`}><div className="flex justify-between gap-3"><div><p className="font-black">{combo.nome}</p><p className="text-sm opacity-70">{duracaoComUnidade(combo.duracao)}</p></div><strong>{dinheiro(combo.valor)}</strong></div><p className="mt-3 text-xs font-bold opacity-70">Combo especial</p></button>; })}</div></section>}
             <section className="mt-6"><h2 className="text-xl font-black">Dia</h2>
               <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2 lg:mx-0 lg:px-0">{dias.map((item) => <button key={item.data} onClick={() => selecionarDia(item.data)} className={`min-w-16 rounded-3xl border p-3 text-center ${item.data === dia ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-white/10 bg-neutral-900"}`}><span className="block text-xs font-bold capitalize">{item.semana}</span><strong className="block text-2xl">{item.dia}</strong></button>)}</div>
             </section>

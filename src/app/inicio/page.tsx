@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Agendamento, carregarAgendamentos, dataLocal, reservaEstaAtiva } from "@/lib/barber-storage";
+import { Agendamento, dataLocal, reservaEstaAtiva } from "@/lib/barber-storage";
+import { criarClienteSupabase } from "@/lib/supabase/client";
+import { buscarAgendamentos } from "@/lib/supabase/agenda";
 
 function dinheiro(valor: number) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -19,12 +21,10 @@ export default function InicioPage() {
   const [agora, setAgora] = useState(0);
 
   useEffect(() => {
-    function carregar() { setAgendamentos(carregarAgendamentos()); setAgora(Date.now()); }
+    async function carregar() { try { setAgendamentos(await buscarAgendamentos(criarClienteSupabase())); } finally { setAgora(Date.now()); } }
     carregar();
-    window.addEventListener("storage", carregar);
     window.addEventListener("ph10:agendamentos-atualizados", carregar);
     return () => {
-      window.removeEventListener("storage", carregar);
       window.removeEventListener("ph10:agendamentos-atualizados", carregar);
     };
   }, []);

@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Agendamento,
   Cliente,
-  carregarAgendamentos,
-  carregarClientes,
   normalizarWhatsapp,
   obterStatusAtendimento,
   reservaEstaAtiva,
 } from "@/lib/barber-storage";
+import { criarClienteSupabase } from "@/lib/supabase/client";
+import { buscarAgendamentos, buscarClientes } from "@/lib/supabase/agenda";
 
 type ClienteResumo = Cliente & {
   ultimoAtendimento: string | null;
@@ -36,22 +36,22 @@ export default function ClientesPage() {
   const [clienteHistorico, setClienteHistorico] = useState<ClienteResumo | null>(null);
 
   useEffect(() => {
-    function carregar() {
-      setCadastros(carregarClientes());
-      setAgendamentos(carregarAgendamentos());
+    async function carregar() {
+      const supabase = criarClienteSupabase();
+      const [clientesBanco, agendamentosBanco] = await Promise.all([buscarClientes(supabase), buscarAgendamentos(supabase)]);
+      setCadastros(clientesBanco);
+      setAgendamentos(agendamentosBanco);
       setAgora(Date.now());
     }
     function fecharComEsc(event: KeyboardEvent) {
       if (event.key === "Escape") setClienteHistorico(null);
     }
     carregar();
-    window.addEventListener("storage", carregar);
     window.addEventListener("ph10:clientes-atualizados", carregar);
     window.addEventListener("ph10:agendamentos-atualizados", carregar);
     document.addEventListener("keydown", fecharComEsc);
     const intervalo = window.setInterval(() => setAgora(Date.now()), 60_000);
     return () => {
-      window.removeEventListener("storage", carregar);
       window.removeEventListener("ph10:clientes-atualizados", carregar);
       window.removeEventListener("ph10:agendamentos-atualizados", carregar);
       document.removeEventListener("keydown", fecharComEsc);

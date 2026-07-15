@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Agendamento, StatusAtendimento, carregarAgendamentos, obterStatusAtendimento, reservaEstaAtiva } from "@/lib/barber-storage";
+import { Agendamento, StatusAtendimento, obterStatusAtendimento, reservaEstaAtiva } from "@/lib/barber-storage";
+import { criarClienteSupabase } from "@/lib/supabase/client";
+import { buscarAgendamentos } from "@/lib/supabase/agenda";
 
 function dinheiro(valor: number) { return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function dataPorExtenso(data: string) { return new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }).format(new Date(`${data}T12:00:00`)); }
@@ -62,13 +64,11 @@ export default function HistoricoPage() {
   const [codigoBusca, setCodigoBusca] = useState("");
 
   useEffect(() => {
-    function carregar() { setAgendamentos(carregarAgendamentos()); setAgora(Date.now()); }
+    async function carregar() { setAgendamentos(await buscarAgendamentos(criarClienteSupabase())); setAgora(Date.now()); }
     carregar();
-    window.addEventListener("storage", carregar);
     window.addEventListener("ph10:agendamentos-atualizados", carregar);
     const intervalo = window.setInterval(() => setAgora(Date.now()), 60_000);
     return () => {
-      window.removeEventListener("storage", carregar);
       window.removeEventListener("ph10:agendamentos-atualizados", carregar);
       window.clearInterval(intervalo);
     };

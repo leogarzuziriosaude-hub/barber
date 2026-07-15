@@ -4,11 +4,11 @@ import { ChangeEvent, useEffect, useState } from "react";
 import NextImage from "next/image";
 import {
   PerfilBarbearia,
-  carregarPerfil,
   normalizarWhatsapp,
   perfilInicial,
-  salvarPerfil,
 } from "@/lib/barber-storage";
+import { criarClienteSupabase } from "@/lib/supabase/client";
+import { buscarConfiguracao, perfilDoBanco } from "@/lib/supabase/configuracoes";
 
 function iniciais(nome: string) {
   return nome.split(" ").filter(Boolean).slice(0, 2).map((parte) => parte[0]).join("").toUpperCase() || "PH";
@@ -44,13 +44,57 @@ export default function PerfilPage() {
   const [salvo, setSalvo] = useState(false);
   const [erro, setErro] = useState("");
   const [processandoFoto, setProcessandoFoto] = useState(false);
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    function atualizarPerfil() { setPerfil(carregarPerfil()); }
-    atualizarPerfil();
-    window.addEventListener("ph10:perfil-atualizado", atualizarPerfil);
-    return () => window.removeEventListener("ph10:perfil-atualizado", atualizarPerfil);
+    let ativo = true;
+    async function carregar() {
+      try {
+        const supabase = criarClienteSupabase();
+        const configuracao = await buscarConfiguracao(supabase);
+        if (ativo) setPerfil(perfilDoBanco(configuracao));
+      } catch {
+        if (ativo) setErro("Não foi possível carregar o perfil do banco de dados.");
+      } finally {
+        if (ativo) setCarregando(false);
+      }
+    }
+    carregar();
+    return () => { ativo = false; };
   }, []);
+
+  async function persistirPerfil(dados: PerfilBarbearia, supabase = criarClienteSupabase()) {
+    let fotoUrl: string | null = dados.foto || null;
+
+    if (dados.foto.startsWith("data:")) {
+      const arquivo = await (await fetch(dados.foto)).blob();
+      const { error: erroFoto } = await supabase.storage
+        .from("perfil")
+        .upload("barbearia/foto.jpg", arquivo, { contentType: "image/jpeg", upsert: true });
+      if (erroFoto) throw erroFoto;
+      const { data } = supabase.storage.from("perfil").getPublicUrl("barbearia/foto.jpg");
+      fotoUrl = `${data.publicUrl}?v=${Date.now()}`;
+    } else if (!dados.foto) {
+      await supabase.storage.from("perfil").remove(["barbearia/foto.jpg"]);
+    }
+
+    const atualizado = { ...dados, foto: fotoUrl ?? "" };
+    const { error } = await supabase
+      .from("configuracoes")
+      .update({
+        nome: atualizado.nome,
+        subtitulo: atualizado.subtitulo,
+        responsavel: atualizado.responsavel,
+        whatsapp: atualizado.whatsapp,
+        endereco: atualizado.endereco,
+        foto_url: fotoUrl,
+      })
+      .eq("id", 1);
+
+    if (error) throw error;
+    return atualizado;
+  }
 
   function atualizar(campo: keyof PerfilBarbearia, valor: string) {
     setPerfil((atual) => ({ ...atual, [campo]: valor }));
@@ -76,7 +120,7 @@ export default function PerfilPage() {
     }
   }
 
-  function salvar() {
+  async function salvar() {
     if (!perfil.nome.trim() || !perfil.responsavel.trim() || !perfil.whatsapp.trim()) {
       setErro("Preencha o nome da barbearia, o responsável e o WhatsApp.");
       return;
@@ -89,10 +133,18 @@ export default function PerfilPage() {
       endereco: perfil.endereco.trim(),
       whatsapp: normalizarWhatsapp(perfil.whatsapp),
     };
-    salvarPerfil(atualizado);
-    setPerfil(atualizado);
-    setErro("");
-    setSalvo(true);
+    try {
+      setSalvando(true);
+      const persistido = await persistirPerfil(atualizado);
+      setPerfil(persistido);
+      window.dispatchEvent(new Event("ph10:perfil-atualizado"));
+      setErro("");
+      setSalvo(true);
+    } catch {
+      setErro("Não foi possível salvar o perfil. Confira sua conexão e tente novamente.");
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -129,7 +181,7 @@ export default function PerfilPage() {
             <label className="block md:col-span-2"><span className="text-xs font-bold text-[#c8bfb4]">Endereço</span><input value={perfil.endereco} onChange={(event) => atualizar("endereco", event.target.value)} placeholder="Rua, número, bairro e cidade" autoComplete="street-address" className="mt-2 w-full rounded-2xl border border-[#eee2c9]/15 bg-[#191715] px-4 py-4 shadow-inner outline-none placeholder:text-[#70685f] focus:border-amber-400/50 focus:ring-2 focus:ring-amber-400/30" /></label>
           </div>
 
-            <button type="button" onClick={salvar} className="mt-6 w-full rounded-2xl bg-[#e7d7b8] px-5 py-4 text-sm font-black text-[#24211e] sm:w-auto">Salvar perfil</button>
+            <button type="button" onClick={salvar} disabled={carregando || salvando || processandoFoto} className="mt-6 w-full rounded-2xl bg-[#e7d7b8] px-5 py-4 text-sm font-black text-[#24211e] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">{carregando ? "Carregando..." : salvando ? "Salvando..." : "Salvar perfil"}</button>
           </section>
         </div>
       </div>

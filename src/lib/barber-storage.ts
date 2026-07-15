@@ -6,8 +6,8 @@ export const BLOQUEIOS_KEY = "ph10:bloqueios";
 export const CLIENTES_KEY = "ph10:clientes";
 export const PERFIL_KEY = "ph10:perfil";
 
-export type Servico = { id: number; nome: string; duracao: string; valor: number; status: "Ativo" | "Inativo" };
-export type Combo = { id: number; nome: string; duracao: string; servicosIds: number[]; valor: number; descontoPercentual?: number; status: "Ativo" | "Inativo" };
+export type Servico = { id: string; nome: string; duracao: string; valor: number; status: "Ativo" | "Inativo" };
+export type Combo = { id: string; nome: string; duracao: string; servicosIds: string[]; valor: number; descontoPercentual?: number; status: "Ativo" | "Inativo" };
 export type DiaFuncionamento = { id: string; nome: string; curto: string; ativo: boolean; abertura: string; fechamento: string; temPausa: boolean; pausaInicio: string; pausaFim: string };
 export type ConfigAgenda = { intervalo: "15" | "30" | "45" | "60"; antecedenciaMinima: "1" | "2" | "4" | "24"; diasParaAgendar: "7" | "15" | "30" };
 export type ConfiguracaoAgenda = { diasFuncionamento: DiaFuncionamento[]; configAgenda: ConfigAgenda };
@@ -19,9 +19,9 @@ export type PerfilBarbearia = {
   endereco: string;
   foto: string;
 };
-export type BloqueioAgenda = { id: number; data: string; diaInteiro: boolean; inicio: string; fim: string; motivo: string };
+export type BloqueioAgenda = { id: string; data: string; diaInteiro: boolean; inicio: string; fim: string; motivo: string };
 export type Cliente = {
-  id: number;
+  id: string;
   nome: string;
   whatsapp: string;
   email?: string;
@@ -42,7 +42,7 @@ export type AlteracaoAgendamento = {
 };
 
 export type Agendamento = {
-  id: number;
+  id: string;
   data: string;
   hora: string;
   cliente: string;
@@ -144,7 +144,7 @@ export function cadastrarOuAtualizarCliente(nome: string, whatsapp: string) {
     return atualizado;
   }
 
-  const novo: Cliente = { id: Date.now(), nome: nome.trim(), whatsapp: numero, criadoEm: agora, atualizadoEm: agora };
+  const novo: Cliente = { id: crypto.randomUUID(), nome: nome.trim(), whatsapp: numero, criadoEm: agora, atualizadoEm: agora };
   salvarClientes([novo, ...clientes]);
   return novo;
 }

@@ -1,28 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { carregarCombos, carregarServicos, salvarCombos, salvarServicos } from "@/lib/barber-storage";
+import type { Combo, Servico } from "@/lib/barber-storage";
 import NoticeDialog from "@/components/NoticeDialog";
+import { criarClienteSupabase } from "@/lib/supabase/client";
+import { atualizarCombo, atualizarServico, buscarCatalogo, criarCombo, criarServico, excluirCombo, excluirServico } from "@/lib/supabase/catalogo";
 
 type Status = "Ativo" | "Inativo";
-
-type Servico = {
-  id: number;
-  nome: string;
-  duracao: string;
-  valor: number;
-  status: Status;
-};
-
-type Combo = {
-  id: number;
-  nome: string;
-  duracao: string;
-  servicosIds: number[];
-  valor: number;
-  descontoPercentual?: number;
-  status: Status;
-};
 
 type ModalTipo = "escolha" | "servico" | "combo" | null;
 
@@ -70,7 +54,7 @@ function dinheiro(valor: number) {
 export default function ServicosPage() {
   const [servicos, setServicos] = useState<Servico[]>(servicosIniciais);
   const [combos, setCombos] = useState<Combo[]>(combosIniciais);
-  const [dadosCarregados, setDadosCarregados] = useState(false);
+  const [, setDadosCarregados] = useState(false);
 
   const [modalTipo, setModalTipo] = useState<ModalTipo>(null);
 
@@ -90,27 +74,30 @@ export default function ServicosPage() {
   const [duracaoCombo, setDuracaoCombo] = useState("");
   const [valorCombo, setValorCombo] = useState("");
   const [descontoCombo, setDescontoCombo] = useState("0");
-  const [servicosSelecionados, setServicosSelecionados] = useState<number[]>(
+  const [servicosSelecionados, setServicosSelecionados] = useState<string[]>(
     []
   );
   const [aviso, setAviso] = useState<{ titulo: string; descricao: string } | null>(null);
+  const [processando, setProcessando] = useState(false);
 
   useEffect(() => {
-    function carregarDados() {
-      setServicos(carregarServicos());
-      setCombos(carregarCombos());
-      setDadosCarregados(true);
+    let ativo = true;
+    async function carregarDados() {
+      try {
+        const catalogo = await buscarCatalogo(criarClienteSupabase());
+        if (ativo) {
+          setServicos(catalogo.servicos);
+          setCombos(catalogo.combos);
+        }
+      } catch {
+        if (ativo) setAviso({ titulo: "Catálogo indisponível", descricao: "Não foi possível carregar serviços e combos do banco." });
+      } finally {
+        if (ativo) setDadosCarregados(true);
+      }
     }
     carregarDados();
+    return () => { ativo = false; };
   }, []);
-
-  useEffect(() => {
-    if (dadosCarregados) salvarServicos(servicos);
-  }, [servicos, dadosCarregados]);
-
-  useEffect(() => {
-    if (dadosCarregados) salvarCombos(combos);
-  }, [combos, dadosCarregados]);
 
   useEffect(() => {
     function fecharComEsc(event: KeyboardEvent) {
@@ -208,7 +195,13 @@ export default function ServicosPage() {
     setModalTipo("combo");
   }
 
-  function salvarServico() {
+  async function recarregarCatalogo() {
+    const catalogo = await buscarCatalogo(criarClienteSupabase());
+    setServicos(catalogo.servicos);
+    setCombos(catalogo.combos);
+  }
+
+  async function salvarServico() {
     const nomeNormalizado = normalizarTexto(nomeServico);
     const duracaoNumerica = Number(somenteNumeros(duracaoServico));
     const valorNumerico = numeroDecimal(valorServico);
@@ -225,26 +218,30 @@ export default function ServicosPage() {
       return;
     }
 
-    if (servicoEditando) {
-      const novaLista = servicos.map((servico) => servico.id === servicoEditando.id ? { ...servico, nome: nomeNormalizado, duracao: String(duracaoNumerica), valor: valorNumerico } : servico);
-      setServicos(novaLista);
-      setCombos((listaAtual) => listaAtual.map((combo) => combo.servicosIds.includes(servicoEditando.id) ? recalcularComboComServicos(combo, novaLista, servicos) : combo));
-    } else {
-      const novoServico: Servico = {
-        id: Date.now(),
-        nome: nomeNormalizado,
-        duracao: String(duracaoNumerica),
-        valor: valorNumerico,
-        status: "Ativo",
-      };
-
-      setServicos((listaAtual) => [novoServico, ...listaAtual]);
+    try {
+      setProcessando(true);
+      const supabase = criarClienteSupabase();
+      if (servicoEditando) {
+        const atualizado = { ...servicoEditando, nome: nomeNormalizado, duracao: String(duracaoNumerica), valor: valorNumerico };
+        const novaLista = servicos.map((servico) => servico.id === atualizado.id ? atualizado : servico);
+        await atualizarServico(supabase, atualizado);
+        const combosAfetados = combos
+          .filter((combo) => combo.servicosIds.includes(atualizado.id))
+          .map((combo) => recalcularComboComServicos(combo, novaLista, servicos));
+        await Promise.all(combosAfetados.map((combo) => atualizarCombo(supabase, combo)));
+      } else {
+        await criarServico(supabase, { nome: nomeNormalizado, duracao: String(duracaoNumerica), valor: valorNumerico, status: "Ativo" });
+      }
+      await recarregarCatalogo();
+      fecharTudo();
+    } catch {
+      setAviso({ titulo: "Não foi possível salvar", descricao: "O serviço não foi alterado. Tente novamente." });
+    } finally {
+      setProcessando(false);
     }
-
-    fecharTudo();
   }
 
-  function salvarCombo() {
+  async function salvarCombo() {
     const nomeNormalizado = normalizarTexto(nomeCombo);
     const duracaoNumerica = Number(somenteNumeros(duracaoCombo));
     const valorNumerico = numeroDecimal(valorCombo);
@@ -266,39 +263,28 @@ export default function ServicosPage() {
       return;
     }
 
-    if (comboEditando) {
-      setCombos((listaAtual) =>
-        listaAtual.map((combo) =>
-          combo.id === comboEditando.id
-            ? {
-                ...combo,
-                nome: nomeNormalizado,
-                duracao: String(duracaoNumerica),
-                valor: valorNumerico,
-                descontoPercentual: Number(descontoCombo || 0),
-                servicosIds: servicosSelecionados,
-              }
-            : combo
-        )
-      );
-    } else {
-      const novoCombo: Combo = {
-        id: Date.now(),
+    try {
+      setProcessando(true);
+      const dados = {
         nome: nomeNormalizado,
         duracao: String(duracaoNumerica),
         servicosIds: servicosSelecionados,
         valor: valorNumerico,
         descontoPercentual: Number(descontoCombo || 0),
-        status: "Ativo",
+        status: "Ativo" as Status,
       };
-
-      setCombos((listaAtual) => [novoCombo, ...listaAtual]);
+      if (comboEditando) await atualizarCombo(criarClienteSupabase(), { ...comboEditando, ...dados });
+      else await criarCombo(criarClienteSupabase(), dados);
+      await recarregarCatalogo();
+      fecharTudo();
+    } catch {
+      setAviso({ titulo: "Não foi possível salvar", descricao: "O combo não foi alterado. Tente novamente." });
+    } finally {
+      setProcessando(false);
     }
-
-    fecharTudo();
   }
 
-  function alternarServicoCombo(id: number) {
+  function alternarServicoCombo(id: string) {
     const novaLista = servicosSelecionados.includes(id)
       ? servicosSelecionados.filter((item) => item !== id)
       : [...servicosSelecionados, id];
@@ -320,23 +306,38 @@ export default function ServicosPage() {
     setValorCombo(String(Math.max(0, valorOriginal * (1 - desconto / 100)).toFixed(2)));
   }
 
-  function apagarServico() {
+  async function apagarServico() {
     if (!servicoParaApagar) return;
-    const novaLista = servicos.filter((servico) => servico.id !== servicoParaApagar.id);
-    setServicos(novaLista);
-    setCombos((listaAtual) => listaAtual.map((combo) => combo.servicosIds.includes(servicoParaApagar.id) ? recalcularComboComServicos(combo, novaLista, servicos) : combo));
-
-    fecharTudo();
+    try {
+      setProcessando(true);
+      const supabase = criarClienteSupabase();
+      const novaLista = servicos.filter((servico) => servico.id !== servicoParaApagar.id);
+      const combosAfetados = combos
+        .filter((combo) => combo.servicosIds.includes(servicoParaApagar.id))
+        .map((combo) => recalcularComboComServicos(combo, novaLista, servicos));
+      await excluirServico(supabase, servicoParaApagar.id);
+      await Promise.all(combosAfetados.map((combo) => atualizarCombo(supabase, combo)));
+      await recarregarCatalogo();
+      fecharTudo();
+    } catch {
+      setAviso({ titulo: "Não foi possível remover", descricao: "O serviço continua cadastrado." });
+    } finally {
+      setProcessando(false);
+    }
   }
 
-  function apagarCombo() {
+  async function apagarCombo() {
     if (!comboParaApagar) return;
-
-    setCombos((listaAtual) =>
-      listaAtual.filter((combo) => combo.id !== comboParaApagar.id)
-    );
-
-    fecharTudo();
+    try {
+      setProcessando(true);
+      await excluirCombo(criarClienteSupabase(), comboParaApagar.id);
+      await recarregarCatalogo();
+      fecharTudo();
+    } catch {
+      setAviso({ titulo: "Não foi possível remover", descricao: "O combo continua cadastrado." });
+    } finally {
+      setProcessando(false);
+    }
   }
 
   function nomesServicosDoCombo(combo: Combo) {
@@ -667,9 +668,10 @@ export default function ServicosPage() {
               <button
                 type="button"
                 onClick={salvarServico}
-                className="rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950"
+                disabled={processando}
+                className="rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950 disabled:opacity-50"
               >
-                Salvar
+                {processando ? "Salvando..." : "Salvar"}
               </button>
             </div>
           </div>
@@ -796,9 +798,10 @@ export default function ServicosPage() {
               <button
                 type="button"
                 onClick={salvarCombo}
-                className="rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950"
+                disabled={processando}
+                className="rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950 disabled:opacity-50"
               >
-                Salvar
+                {processando ? "Salvando..." : "Salvar"}
               </button>
             </div>
           </div>
@@ -837,9 +840,10 @@ export default function ServicosPage() {
               <button
                 type="button"
                 onClick={apagarServico}
-                className="rounded-2xl bg-red-500 px-4 py-4 text-sm font-black text-white"
+                disabled={processando}
+                className="rounded-2xl bg-red-500 px-4 py-4 text-sm font-black text-white disabled:opacity-50"
               >
-                Excluir
+                {processando ? "Excluindo..." : "Excluir"}
               </button>
             </div>
           </div>
@@ -878,9 +882,10 @@ export default function ServicosPage() {
               <button
                 type="button"
                 onClick={apagarCombo}
-                className="rounded-2xl bg-red-500 px-4 py-4 text-sm font-black text-white"
+                disabled={processando}
+                className="rounded-2xl bg-red-500 px-4 py-4 text-sm font-black text-white disabled:opacity-50"
               >
-                Excluir
+                {processando ? "Excluindo..." : "Excluir"}
               </button>
             </div>
           </div>

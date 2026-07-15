@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Agendamento as AgendamentoBase, BloqueioAgenda, StatusAtendimento, carregarAgendamentos, carregarBloqueios, carregarConfiguracaoAgenda, dataLocal, obterStatusAtendimento, proximosDias, registrarAlteracaoAgendamento, reservaEstaAtiva, salvarAgendamentos, salvarBloqueios, salvarConfiguracaoAgenda } from "@/lib/barber-storage";
+import { Agendamento as AgendamentoBase, BloqueioAgenda, StatusAtendimento, dataLocal, obterStatusAtendimento, proximosDias, registrarAlteracaoAgendamento, reservaEstaAtiva } from "@/lib/barber-storage";
 import { intervalosSeSobrepoem, validarDiasFuncionamento } from "@/lib/agenda-rules.mjs";
 import AppointmentCard from "@/components/agenda/AppointmentCard";
 import ConfirmDialog from "@/components/agenda/ConfirmDialog";
 import NoticeDialog from "@/components/NoticeDialog";
+import { criarClienteSupabase } from "@/lib/supabase/client";
+import { agendaDoBanco, atualizarAgendaSupabase, buscarConfiguracao } from "@/lib/supabase/configuracoes";
+import { atualizarAgendamento, buscarAgendamentos, buscarBloqueios, criarBloqueioSupabase, excluirBloqueioSupabase } from "@/lib/supabase/agenda";
 
 type Status = StatusAtendimento;
 
@@ -171,6 +174,7 @@ export default function AgendaPage() {
   const [agendamentoEditarStatus, setAgendamentoEditarStatus] = useState<Agendamento | null>(null);
   const [confirmacao, setConfirmacao] = useState<Confirmacao | null>(null);
   const [aviso, setAviso] = useState<{ titulo: string; descricao: string } | null>(null);
+  const [salvandoConfiguracao, setSalvandoConfiguracao] = useState(false);
 
   const [diasFuncionamento, setDiasFuncionamento] = useState<
     DiaFuncionamento[]
@@ -181,23 +185,32 @@ export default function AgendaPage() {
 
 
   useEffect(() => {
-    function carregar() {
+    let ativo = true;
+    async function carregar() {
       const agora = Date.now();
-      setAgendamentos(
-        carregarAgendamentos().map((item) => ({ ...item, status: obterStatusAtendimento(item, agora) }))
-      );
-      setBloqueios(carregarBloqueios());
       setAgoraRemarcacao(agora);
-      const configuracaoSalva = carregarConfiguracaoAgenda();
-      if (configuracaoSalva) {
-        setDiasFuncionamento(configuracaoSalva.diasFuncionamento);
-        setConfigAgenda(configuracaoSalva.configAgenda);
+      try {
+        const supabase = criarClienteSupabase();
+        const [configuracaoBanco, agendamentosBanco, bloqueiosBanco] = await Promise.all([buscarConfiguracao(supabase), buscarAgendamentos(supabase), buscarBloqueios(supabase)]);
+        const configuracaoSalva = agendaDoBanco(configuracaoBanco);
+
+        if (ativo) {
+          setAgendamentos(agendamentosBanco.map((item) => ({ ...item, status: obterStatusAtendimento(item, agora) })));
+          setBloqueios(bloqueiosBanco);
+          setDiasFuncionamento(configuracaoSalva.diasFuncionamento);
+          setConfigAgenda(configuracaoSalva.configAgenda);
+        }
+      } catch {
+        if (ativo) setAviso({ titulo: "Agenda indisponível", descricao: "Não foi possível carregar os horários do banco de dados." });
       }
     }
     carregar();
-    const eventos = ["storage", "ph10:agendamentos-atualizados", "ph10:bloqueios-atualizados", "ph10:agenda-config-atualizada"];
+    const eventos = ["ph10:agendamentos-atualizados", "ph10:bloqueios-atualizados", "ph10:agenda-config-atualizada"];
     eventos.forEach((evento) => window.addEventListener(evento, carregar));
-    return () => eventos.forEach((evento) => window.removeEventListener(evento, carregar));
+    return () => {
+      ativo = false;
+      eventos.forEach((evento) => window.removeEventListener(evento, carregar));
+    };
   }, []);
 
   useEffect(() => {
@@ -272,7 +285,7 @@ export default function AgendaPage() {
     );
   }
 
-  function alterarStatusAtendimento(statusManual?: "Cancelado" | "Não compareceu", alvo = agendamentoEditarStatus) {
+  async function alterarStatusAtendimento(statusManual?: "Cancelado" | "Não compareceu", alvo = agendamentoEditarStatus) {
     if (!alvo) return;
     const novaLista = agendamentos.map((item) => {
       if (item.id !== alvo.id) return item;
@@ -284,9 +297,30 @@ export default function AgendaPage() {
       const comAlteracao = registrarAlteracaoAgendamento(baseAtualizada, { tipo, origem: "Dono", statusAnterior, statusNovo });
       return { ...comAlteracao, status: statusNovo };
     });
+    const atualizado = novaLista.find((item) => item.id === alvo.id);
+    if (atualizado) await atualizarAgendamento(criarClienteSupabase(), atualizado);
     setAgendamentos(novaLista);
-    salvarAgendamentos(novaLista);
     setAgendamentoEditarStatus(null);
+  }
+
+  async function salvarHorariosFuncionamento() {
+    const erroConfiguracao = validarDiasFuncionamento(diasFuncionamento);
+    if (erroConfiguracao) {
+      setAviso({ titulo: "Confira os horários", descricao: erroConfiguracao });
+      return;
+    }
+
+    try {
+      setSalvandoConfiguracao(true);
+      await atualizarAgendaSupabase(criarClienteSupabase(), { diasFuncionamento, configAgenda });
+      window.dispatchEvent(new Event("ph10:agenda-config-atualizada"));
+      setModalHorariosAberto(false);
+      setAviso({ titulo: "Configurações salvas", descricao: "Os novos horários já estão disponíveis na página do cliente." });
+    } catch {
+      setAviso({ titulo: "Não foi possível salvar", descricao: "Confira sua conexão e tente novamente." });
+    } finally {
+      setSalvandoConfiguracao(false);
+    }
   }
 
   function abrirBloqueio() {
@@ -298,7 +332,7 @@ export default function AgendaPage() {
     setModalBloqueioAberto(true);
   }
 
-  function salvarBloqueio() {
+  async function salvarBloqueio() {
     if (!bloqueioData || !bloqueioMotivo.trim() || (!bloqueioDiaInteiro && (!bloqueioInicio || !bloqueioFim))) {
       setAviso({ titulo: "Preencha o bloqueio", descricao: "Informe a data, o período e o motivo antes de continuar." });
       return;
@@ -315,18 +349,15 @@ export default function AgendaPage() {
     });
     if (conflitos.length > 0) { setConflitosBloqueio(conflitos); return; }
 
-    const novo: BloqueioAgenda = { id: Date.now(), data: bloqueioData, diaInteiro: bloqueioDiaInteiro, inicio: bloqueioDiaInteiro ? "00:00" : bloqueioInicio, fim: bloqueioDiaInteiro ? "23:59" : bloqueioFim, motivo: bloqueioMotivo.trim() };
-    const novaLista = [...bloqueios, novo];
-    setBloqueios(novaLista);
-    salvarBloqueios(novaLista);
+    await criarBloqueioSupabase(criarClienteSupabase(), { data: bloqueioData, diaInteiro: bloqueioDiaInteiro, inicio: bloqueioDiaInteiro ? "00:00" : bloqueioInicio, fim: bloqueioDiaInteiro ? "23:59" : bloqueioFim, motivo: bloqueioMotivo.trim() });
+    setBloqueios(await buscarBloqueios(criarClienteSupabase()));
     setDiaSelecionado(bloqueioData);
     setModalBloqueioAberto(false);
   }
 
-  function removerBloqueio(id: number) {
-    const novaLista = bloqueios.filter((item) => item.id !== id);
-    setBloqueios(novaLista);
-    salvarBloqueios(novaLista);
+  async function removerBloqueio(id: string) {
+    await excluirBloqueioSupabase(criarClienteSupabase(), id);
+    setBloqueios((lista) => lista.filter((item) => item.id !== id));
   }
 
   function executarConfirmacao() {
@@ -351,7 +382,7 @@ export default function AgendaPage() {
     window.open(`https://wa.me/${numeroCompleto}?text=${mensagem}`, "_blank", "noopener,noreferrer");
   }
 
-  function concluirRemarcacao() {
+  async function concluirRemarcacao() {
     if (!agendamentoRemarcar || !novaData || !novoHorario) { setAviso({ titulo: "Escolha um horário", descricao: "Informe a nova data e o novo horário para concluir a remarcação." }); return; }
     const anterior = agendamentoRemarcar;
     const novaLista = agendamentos.map((item) => {
@@ -362,8 +393,9 @@ export default function AgendaPage() {
       );
       return { ...atualizado, status: obterStatusAtendimento(atualizado, agoraRemarcacao) };
     });
+    const atualizado = novaLista.find((item) => item.id === anterior.id);
+    if (atualizado) await atualizarAgendamento(criarClienteSupabase(), atualizado);
     setAgendamentos(novaLista);
-    salvarAgendamentos(novaLista);
     setDiaSelecionado(novaData);
     setAgendamentoRemarcar(null);
 
@@ -786,18 +818,11 @@ export default function AgendaPage() {
             <div className="sticky bottom-0 -mx-5 mt-5 bg-neutral-900/95 px-5 pb-1 pt-4 backdrop-blur">
               <button
                 type="button"
-                onClick={() => {
-                  const erroConfiguracao = validarDiasFuncionamento(diasFuncionamento);
-                  if (erroConfiguracao) {
-                    setAviso({ titulo: "Confira os horários", descricao: erroConfiguracao });
-                    return;
-                  }
-                  salvarConfiguracaoAgenda({ diasFuncionamento, configAgenda });
-                  setModalHorariosAberto(false);
-                }}
-                className="w-full rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950"
+                onClick={salvarHorariosFuncionamento}
+                disabled={salvandoConfiguracao}
+                className="w-full rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Salvar configurações
+                {salvandoConfiguracao ? "Salvando..." : "Salvar configurações"}
               </button>
             </div>
           </div>

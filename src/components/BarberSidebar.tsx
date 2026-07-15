@@ -4,8 +4,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { PerfilBarbearia, carregarPerfil, perfilInicial } from "@/lib/barber-storage";
+import { PerfilBarbearia, perfilInicial } from "@/lib/barber-storage";
 import { criarClienteSupabase } from "@/lib/supabase/client";
+import { buscarConfiguracao, perfilDoBanco } from "@/lib/supabase/configuracoes";
 
 const menu = [
   { nome: "Início", href: "/inicio", icon: "⌂" },
@@ -24,10 +25,21 @@ export default function BarberSidebar() {
   const [perfil, setPerfil] = useState<PerfilBarbearia>(perfilInicial);
 
   useEffect(() => {
-    function atualizarPerfil() { setPerfil(carregarPerfil()); }
+    let ativo = true;
+    async function atualizarPerfil() {
+      try {
+        const configuracao = await buscarConfiguracao(criarClienteSupabase());
+        if (ativo) setPerfil(perfilDoBanco(configuracao));
+      } catch {
+        // O perfil padrão mantém o menu utilizável durante falhas transitórias.
+      }
+    }
     atualizarPerfil();
     window.addEventListener("ph10:perfil-atualizado", atualizarPerfil);
-    return () => window.removeEventListener("ph10:perfil-atualizado", atualizarPerfil);
+    return () => {
+      ativo = false;
+      window.removeEventListener("ph10:perfil-atualizado", atualizarPerfil);
+    };
   }, []);
 
   async function sair() {
