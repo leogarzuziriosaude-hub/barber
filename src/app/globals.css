@@ -22,11 +22,18 @@
 
 * { box-sizing: border-box; }
 
-html { background: var(--background); }
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  background: var(--background);
+}
 
 body {
   margin: 0;
-  overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
   background:
     radial-gradient(circle at 90% 0%, rgba(216, 194, 158, .09), transparent 28rem),
     var(--background);
@@ -104,7 +111,13 @@ input[type="time"]::-webkit-datetime-edit {
   text-transform: uppercase;
 }
 
-.app-page { min-height: 100dvh; color: var(--foreground); }
+.app-page {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100dvh;
+  overflow-x: clip;
+  color: var(--foreground);
+}
 .page-wrap {
   margin-inline: auto;
   width: 100%;
@@ -113,8 +126,7 @@ input[type="time"]::-webkit-datetime-edit {
 }
 
 .mobile-menu-trigger {
-  top: 50%;
-  translate: 0 -50%;
+  top: calc(env(safe-area-inset-top, 0px) + 1rem);
 }
 .mobile-sidebar {
   height: 100dvh;
