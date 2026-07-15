@@ -96,8 +96,7 @@ export default function PaginaCliente() {
     const referencia = new Date(agora);
     const expediente = configuracao.diasFuncionamento.find((item) => item.id === idsDosDias[referencia.getDay()]);
     if (!expediente?.ativo) return "Fechado hoje";
-    const horario = `Hoje, ${expediente.abertura} às ${expediente.fechamento}`;
-    return expediente.temPausa ? `${horario} • pausa ${expediente.pausaInicio} às ${expediente.pausaFim}` : horario;
+    return `Hoje, ${expediente.abertura} às ${expediente.fechamento}`;
   }, [configuracao, agora]);
   const dias = proximosDias(Number(configuracao?.configAgenda.diasParaAgendar ?? 7));
   const horarios = useMemo(() => {
