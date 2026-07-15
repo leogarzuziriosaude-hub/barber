@@ -52,23 +52,52 @@ input[autocomplete="name"]:focus {
 input,
 select,
 textarea {
+  box-sizing: border-box;
   min-width: 0;
   min-inline-size: 0;
   max-width: 100%;
+  max-inline-size: 100%;
+}
+
+label { min-width: 0; min-inline-size: 0; max-width: 100%; }
+label > input,
+label > select,
+label > textarea {
+  display: block;
+  width: 100%;
+  inline-size: 100%;
 }
 
 input[type="date"],
 input[type="time"] {
   width: 100%;
+  inline-size: 100%;
   overflow: hidden;
   font-size: 16px;
 }
 
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}
+
+input[type="date"]::-webkit-datetime-edit,
+input[type="time"]::-webkit-datetime-edit {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
 .mobile-form-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 .mobile-form-grid > * { min-width: 0; }
+
+@media (min-width: 640px) {
+  .mobile-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 ::selection { background: var(--sand); color: var(--ink); }
 
@@ -98,9 +127,16 @@ input[type="time"] {
   padding: max(1rem, env(safe-area-inset-top, 0px)) 1rem max(1rem, env(safe-area-inset-bottom, 0px));
 }
 .safe-modal-card {
+  min-width: 0;
   max-height: calc(100dvh - max(1rem, env(safe-area-inset-top, 0px)) - max(1rem, env(safe-area-inset-bottom, 0px)));
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+.safe-modal-card > *,
+.safe-modal-card label,
+.safe-modal-card div {
+  min-width: 0;
 }
 
 @media (max-width: 1023px) {
@@ -108,6 +144,11 @@ input[type="time"] {
   select,
   textarea {
     font-size: 16px !important;
+  }
+  input[type="date"],
+  input[type="time"] {
+    -webkit-appearance: none;
+    appearance: none;
   }
 }
 
