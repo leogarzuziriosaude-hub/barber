@@ -230,20 +230,19 @@ export default function PaginaCliente() {
         {!reservaConcluida && (
           <>
             <header className="hero-panel">
-              <div className="flex items-start gap-4">
-                <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-amber-400/30 bg-neutral-900 text-xl font-black text-amber-400">
-                  {perfil.foto ? <Image src={perfil.foto} alt={`Foto de ${perfil.nome}`} width={80} height={80} unoptimized className="h-full w-full object-cover" /> : "PH"}
+              <div className="flex items-center gap-4 sm:gap-5">
+                <div className="grid h-28 w-28 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-amber-400/30 bg-neutral-900 text-2xl font-black text-amber-400 shadow-[0_16px_40px_rgba(0,0,0,.22)] sm:h-32 sm:w-32">
+                  {perfil.foto ? <Image src={perfil.foto} alt={`Foto de ${perfil.nome}`} width={128} height={128} unoptimized className="h-full w-full object-cover" /> : "PH"}
                 </div>
-                <div className="min-w-0 pt-1">
-                  <p className="text-xs font-black uppercase tracking-[0.25em] text-amber-400">{perfil.subtitulo || "Barbearia"}</p>
-                  <h1 className="mt-1 text-2xl font-black sm:text-3xl">{perfil.nome}</h1>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-400">{perfil.subtitulo || "Barbearia"}</p>
+                  <h1 className="mt-1 text-xl font-black leading-tight sm:text-2xl">{perfil.nome}</h1>
+                  <div className="mt-3 space-y-1.5 border-t border-white/10 pt-3 text-[11px] leading-relaxed">
+                    <p className="font-bold text-neutral-300">{funcionamentoHoje}</p>
+                    {perfil.endereco && <p className="text-neutral-400">{perfil.endereco}</p>}
+                  </div>
                 </div>
               </div>
-              <div className="mt-5 space-y-2 rounded-2xl border border-white/10 bg-black/10 p-4 text-sm">
-                <p className="font-bold text-neutral-200">{funcionamentoHoje}</p>
-                {perfil.endereco && <p className="leading-relaxed text-neutral-400">{perfil.endereco}</p>}
-              </div>
-              <p className="mt-4 text-sm text-neutral-400">Escolha o serviço, o dia e um horário disponível.</p>
             </header>
             <div className="flex justify-end">
               <ClientReservationLookup
@@ -254,6 +253,7 @@ export default function PaginaCliente() {
                 onAtualizar={setAgendamentos}
               />
             </div>
+            <p className="mt-5 text-sm text-neutral-400">Escolha o serviço, o dia e um horário disponível.</p>
           </>
         )}
 
@@ -298,7 +298,7 @@ export default function PaginaCliente() {
           </section>
         ) : (
           <>
-            <section className="mt-6"><h2 className="text-xl font-black">Serviço</h2>
+            <section className="mt-3"><h2 className="text-xl font-black">Serviço</h2>
               {servicos.length === 0 ? <div className="mt-3 rounded-3xl border border-dashed border-white/10 bg-neutral-900 p-5 text-center text-sm text-neutral-400">Nenhum serviço disponível no momento.</div> : <div className="mt-3 grid gap-3 lg:grid-cols-2">{servicos.map((item) => <button key={item.id} onClick={() => setServicoId(item.id)} className={`rounded-3xl border p-4 text-left ${item.id === servicoId ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-white/10 bg-neutral-900"}`}><div className="flex justify-between gap-3"><div><p className="font-black">{item.nome}</p><p className="text-sm opacity-70">{duracaoComUnidade(item.duracao)}</p></div><strong>{dinheiro(item.valor)}</strong></div></button>)}</div>}
             </section>
             {combos.length > 0 && <section className="mt-6 border-t border-white/10 pt-6"><div><p className="text-xs font-black uppercase tracking-[.2em] text-amber-400">Economize</p><h2 className="mt-1 text-xl font-black">Combos</h2></div><div className="mt-3 grid gap-3 lg:grid-cols-2">{combos.map((combo) => { const idSelecao = -combo.id; return <button key={combo.id} onClick={() => setServicoId(idSelecao)} className={`rounded-3xl border p-4 text-left ${idSelecao === servicoId ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-amber-400/20 bg-amber-400/5"}`}><div className="flex justify-between gap-3"><div><p className="font-black">{combo.nome}</p><p className="text-sm opacity-70">{duracaoComUnidade(combo.duracao)}</p></div><strong>{dinheiro(combo.valor)}</strong></div><p className="mt-3 text-xs font-bold opacity-70">Combo especial</p></button>; })}</div></section>}
