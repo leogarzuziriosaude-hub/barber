@@ -26,10 +26,10 @@ export async function POST(request: NextRequest) {
     const supabase = criarClienteSupabaseAdmin();
     const [catalogo, configBanco, bloqueios, reservas] = await Promise.all([buscarCatalogo(supabase, true), buscarConfiguracao(supabase), buscarBloqueios(supabase), buscarAgendamentos(supabase)]);
     const selecoes = corpo.itens?.map((selecao) => selecao.tipo === "servico" ? catalogo.servicos.find((x) => x.id === selecao.id) : catalogo.combos.find((x) => x.id === selecao.id));
-    if (!selecoes?.length || selecoes.some((item) => !item) || (corpo.itens.some((item) => item.tipo === "combo") && corpo.itens.length !== 1)) return NextResponse.json({ erro: "Seleção de serviços inválida." }, { status: 409 });
+    if (!selecoes?.length || selecoes.some((item) => !item) || corpo.itens.some((item) => item.tipo !== "servico" && item.tipo !== "combo")) return NextResponse.json({ erro: "Seleção de serviços inválida." }, { status: 409 });
     const itens = selecoes.filter((item): item is NonNullable<typeof item> => Boolean(item));
     const item = { nome: itens.map((x) => x.nome).join(" + "), duracao: String(itens.reduce((total, x) => total + Number(x.duracao), 0)), valor: itens.reduce((total, x) => total + x.valor, 0) };
-    const itemTipo = corpo.itens[0].tipo === "combo" ? "combo" : corpo.itens.length === 1 ? "servico" : "servicos";
+    const itemTipo = corpo.itens.length === 1 ? corpo.itens[0].tipo : "itens";
     const config = agendaDoBanco(configBanco);
     const dia = config.diasFuncionamento.find((x) => x.id === idsDias[new Date(`${corpo.data}T12:00:00`).getDay()]);
     const inicio = minutos(corpo.hora); const fim = inicio + Number(item.duracao);
@@ -45,8 +45,14 @@ export async function POST(request: NextRequest) {
     const historico = [{ id: crypto.randomUUID(), tipo: "Criada", origem: "Cliente", realizadaEm: new Date().toISOString(), dataNova: corpo.data, horaNova: corpo.hora }];
     const { data: criada, error } = await supabase.from("agendamentos").insert({ protocolo: protocolo(), cliente_id: cliente.id, cliente_nome: corpo.nome.trim(), whatsapp: corpo.whatsapp, item_tipo: itemTipo, servico_id: itemTipo === "servico" ? corpo.itens[0].id : null, combo_id: itemTipo === "combo" ? corpo.itens[0].id : null, item_nome: item.nome, data: corpo.data, hora: corpo.hora, duracao_minutos: Number(item.duracao), valor_centavos: Math.round(item.valor * 100), historico }).select("id").single();
     if (error) throw error;
-    if (itemTipo !== "combo") {
-      const { error: erroVinculos } = await supabase.from("agendamento_servicos").insert(corpo.itens.map((selecao, ordem) => ({ agendamento_id: criada.id, servico_id: selecao.id, ordem })));
+    const servicosSelecionados = corpo.itens.filter((selecao) => selecao.tipo === "servico");
+    const combosSelecionados = corpo.itens.filter((selecao) => selecao.tipo === "combo");
+    if (servicosSelecionados.length > 0) {
+      const { error: erroVinculos } = await supabase.from("agendamento_servicos").insert(servicosSelecionados.map((selecao, ordem) => ({ agendamento_id: criada.id, servico_id: selecao.id, ordem })));
+      if (erroVinculos) { await supabase.from("agendamentos").delete().eq("id", criada.id); throw erroVinculos; }
+    }
+    if (combosSelecionados.length > 0) {
+      const { error: erroVinculos } = await supabase.from("agendamento_combos").insert(combosSelecionados.map((selecao, ordem) => ({ agendamento_id: criada.id, combo_id: selecao.id, ordem })));
       if (erroVinculos) { await supabase.from("agendamentos").delete().eq("id", criada.id); throw erroVinculos; }
     }
     const reserva = (await buscarAgendamentos(supabase)).find((x) => x.id === criada.id);

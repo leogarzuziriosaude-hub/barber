@@ -162,17 +162,13 @@ export default function PaginaCliente() {
   }
 
   function alternarSelecao(id: string) {
-    setSelecoes((atuais) => {
-      if (id.startsWith("combo:")) return atuais.includes(id) ? [] : [id];
-      const semCombo = atuais.filter((item) => !item.startsWith("combo:"));
-      return semCombo.includes(id) ? semCombo.filter((item) => item !== id) : [...semCombo, id];
-    });
+    setSelecoes((atuais) => atuais.includes(id) ? atuais.filter((item) => item !== id) : [...atuais, id]);
     setHorario("");
   }
 
   async function agendar() {
     if (!servico || !dia || !horario || !nome.trim() || !whatsapp.trim()) {
-      setAvisoFormulario({ titulo: "Faltam algumas informações", mensagem: "Escolha um ou mais serviços, o dia e o horário e preencha seus dados para continuar." });
+      setAvisoFormulario({ titulo: "Faltam algumas informações", mensagem: "Escolha ao menos um serviço ou combo, o dia e o horário e preencha seus dados para continuar." });
       return;
     }
     if (!/^[A-Za-zÀ-ÖØ-öø-ÿ]+(?:\s+[A-Za-zÀ-ÖØ-öø-ÿ]+)*$/.test(nome.trim())) {
@@ -253,7 +249,7 @@ export default function PaginaCliente() {
                 onAtualizar={setAgendamentos}
               />
             </div>
-            <p className="mt-5 text-sm text-neutral-400">Escolha um ou mais serviços, o dia e um horário disponível.</p>
+            <p className="mt-5 text-sm text-neutral-400">Escolha serviços e combos, o dia e um horário disponível.</p>
           </>
         )}
 
