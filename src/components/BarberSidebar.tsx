@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PerfilBarbearia, carregarPerfil, perfilInicial } from "@/lib/barber-storage";
+import { criarClienteSupabase } from "@/lib/supabase/client";
 
 const menu = [
   { nome: "Início", href: "/inicio", icon: "⌂" },
@@ -17,7 +18,9 @@ const menu = [
 
 export default function BarberSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [aberto, setAberto] = useState(false);
+  const [saindo, setSaindo] = useState(false);
   const [perfil, setPerfil] = useState<PerfilBarbearia>(perfilInicial);
 
   useEffect(() => {
@@ -26,6 +29,15 @@ export default function BarberSidebar() {
     window.addEventListener("ph10:perfil-atualizado", atualizarPerfil);
     return () => window.removeEventListener("ph10:perfil-atualizado", atualizarPerfil);
   }, []);
+
+  async function sair() {
+    if (saindo) return;
+    setSaindo(true);
+    await criarClienteSupabase().auth.signOut();
+    setAberto(false);
+    router.replace("/login");
+    router.refresh();
+  }
 
   return (
     <>
@@ -59,7 +71,7 @@ export default function BarberSidebar() {
           <p className="text-[10px] font-black uppercase tracking-[.18em] text-[#a89d91]">Link público</p>
           <p className="mt-2 font-mono text-sm text-[#e1c89f]">/b/ph10</p>
           <Link href="/b/ph10" className="mt-4 inline-flex text-[10px] font-black uppercase tracking-[.14em] text-[#f3ead8]">Visualizar página →</Link>
-          <Link href="/login" className="mt-4 block border-t border-[#eee2c9]/10 pt-4 text-[10px] font-black uppercase tracking-[.14em] text-[#a89d91]">Sair</Link>
+          <button type="button" onClick={sair} disabled={saindo} className="mt-4 block w-full border-t border-[#eee2c9]/10 pt-4 text-left text-[10px] font-black uppercase tracking-[.14em] text-[#a89d91] disabled:opacity-50">{saindo ? "Saindo..." : "Sair"}</button>
         </div>
       </aside>
     </>

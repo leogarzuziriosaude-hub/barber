@@ -3,6 +3,8 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import NoticeDialog from "@/components/NoticeDialog";
+import { criarClienteSupabase } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,12 +12,27 @@ export default function LoginPage() {
   const [senha, setSenha] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [entrando, setEntrando] = useState(false);
+  const [erro, setErro] = useState("");
 
-  function entrar(event: FormEvent<HTMLFormElement>) {
+  async function entrar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!email.trim() || !senha) return;
     setEntrando(true);
-    window.setTimeout(() => router.push("/inicio"), 350);
+
+    const supabase = criarClienteSupabase();
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password: senha,
+    });
+
+    if (error) {
+      setEntrando(false);
+      setErro("Confira o e-mail e a senha informados e tente novamente.");
+      return;
+    }
+
+    router.replace("/inicio");
+    router.refresh();
   }
 
   return (
@@ -50,6 +67,7 @@ export default function LoginPage() {
 
         <Link href="/b/ph10" className="mt-6 block text-center text-xs font-bold text-[#aaa095]">Ver página de agendamento →</Link>
       </div>
+      {erro && <NoticeDialog titulo="Não foi possível entrar" descricao={erro} onFechar={() => setErro("")} botaoTexto="Tentar novamente" />}
     </main>
   );
 }
