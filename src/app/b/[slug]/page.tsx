@@ -63,6 +63,7 @@ export default function PaginaCliente() {
   const [reservaConcluida, setReservaConcluida] = useState<Agendamento | null>(null);
   const [codigoCopiado, setCodigoCopiado] = useState(false);
   const [reservaExistenteAviso, setReservaExistenteAviso] = useState<Agendamento | null>(null);
+  const [avisoFormulario, setAvisoFormulario] = useState<{ titulo: string; mensagem: string } | null>(null);
 
   useEffect(() => {
     function carregar() {
@@ -129,15 +130,15 @@ export default function PaginaCliente() {
 
   function agendar() {
     if (!servico || !dia || !horario || !nome.trim() || !whatsapp.trim()) {
-      alert("Preencha todos os campos.");
+      setAvisoFormulario({ titulo: "Faltam algumas informações", mensagem: "Escolha o serviço, o dia e o horário e preencha seus dados para continuar." });
       return;
     }
     if (!/^[A-Za-zÀ-ÖØ-öø-ÿ]+(?:\s+[A-Za-zÀ-ÖØ-öø-ÿ]+)*$/.test(nome.trim())) {
-      alert("Informe um nome usando apenas letras.");
+      setAvisoFormulario({ titulo: "Confira o nome", mensagem: "Informe seu nome usando apenas letras." });
       return;
     }
     if (!/^9\d{8}$/.test(whatsapp)) {
-      alert("Informe os 9 dígitos do celular, começando pelo 9.");
+      setAvisoFormulario({ titulo: "Confira o WhatsApp", mensagem: "Informe os 9 dígitos do celular, começando pelo 9." });
       return;
     }
 
@@ -153,7 +154,7 @@ export default function PaginaCliente() {
     if (bloqueioAtual) {
       setBloqueios(carregarBloqueios());
       setHorario("");
-      alert("Esse período não está mais disponível. Escolha outro horário.");
+      setAvisoFormulario({ titulo: "Período indisponível", mensagem: "Esse período não está mais disponível. Escolha outro horário." });
       return;
     }
     const inicioPretendido = minutos(horario);
@@ -167,7 +168,7 @@ export default function PaginaCliente() {
     if (existeConflito) {
       setAgendamentos(listaAtual);
       setHorario("");
-      alert("Esse horário acabou de ser ocupado. Escolha outro.");
+      setAvisoFormulario({ titulo: "Horário ocupado", mensagem: "Esse horário acabou de ser reservado por outra pessoa. Escolha outro." });
       return;
     }
 
@@ -309,6 +310,17 @@ export default function PaginaCliente() {
               <button type="button" onClick={() => setReservaExistenteAviso(null)} className="rounded-2xl bg-white/10 px-4 py-4 text-sm font-black">Entendi</button>
               <a href={linkPedidoRemarcacao(reservaExistenteAviso)} target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-2xl bg-green-500 px-4 py-4 text-sm font-black text-white">Falar com a PH10</a>
             </div>
+          </div>
+        </div>
+      )}
+
+      {avisoFormulario && (
+        <div onClick={() => setAvisoFormulario(null)} className="safe-modal-shell fixed inset-0 z-[330] flex items-center justify-center bg-black/75 backdrop-blur-sm">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="aviso-formulario-titulo" onClick={(event) => event.stopPropagation()} className="w-full max-w-sm rounded-[2rem] border border-white/10 bg-neutral-900 p-6 text-center text-white shadow-2xl">
+            <div className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-amber-400/25 bg-amber-400/10 text-2xl font-black text-amber-400">!</div>
+            <h2 id="aviso-formulario-titulo" className="mt-4 text-2xl font-black">{avisoFormulario.titulo}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-400">{avisoFormulario.mensagem}</p>
+            <button type="button" onClick={() => setAvisoFormulario(null)} className="mt-6 w-full rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950">Entendi</button>
           </div>
         </div>
       )}

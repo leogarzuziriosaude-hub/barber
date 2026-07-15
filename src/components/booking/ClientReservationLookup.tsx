@@ -170,7 +170,7 @@ export default function ClientReservationLookup({ agendamentos, bloqueios, confi
   }
 
   const modal = aberto ? (
-    <div onClick={fechar} className="safe-modal-shell fixed inset-0 z-[320] flex items-end justify-center bg-black/75 backdrop-blur-sm lg:items-center">
+    <div onClick={fechar} className="safe-modal-shell fixed inset-0 z-[320] flex items-center justify-center bg-black/75 backdrop-blur-sm">
       <div role="dialog" aria-modal="true" aria-labelledby="consulta-reserva-titulo" onClick={(event) => event.stopPropagation()} className="safe-modal-card w-full max-w-md rounded-[2rem] border border-white/10 bg-neutral-900 p-5 text-white shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div><p className="text-xs font-black uppercase tracking-[.18em] text-amber-400">Área do cliente</p><h2 id="consulta-reserva-titulo" className="mt-1 text-2xl font-black">Minha reserva</h2></div>
@@ -180,7 +180,7 @@ export default function ClientReservationLookup({ agendamentos, bloqueios, confi
         {!reserva ? (
           <div className="mt-5">
             <p className="text-sm leading-relaxed text-neutral-400">Use o protocolo e o mesmo WhatsApp informado no agendamento.</p>
-            <label className="mt-4 block"><span className="text-xs font-bold text-neutral-400">Código da reserva</span><input value={codigo} onChange={(event) => setCodigo(event.target.value.toUpperCase().slice(0, 11))} placeholder="PH10-XXXXXX" autoCapitalize="characters" spellCheck={false} className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 font-mono text-sm uppercase outline-none focus:ring-2 focus:ring-amber-400" /></label>
+            <label className="mt-4 block"><span className="text-xs font-bold text-neutral-400">Código da reserva</span><input value={codigo} onChange={(event) => setCodigo(event.target.value.toUpperCase().slice(0, 11))} placeholder="PH10-XXXXXX" autoCapitalize="characters" spellCheck={false} className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 font-mono text-base uppercase outline-none focus:ring-2 focus:ring-amber-400" /></label>
             <label className="mt-3 block"><span className="text-xs font-bold text-neutral-400">WhatsApp</span><div className="mt-2 flex overflow-hidden rounded-2xl bg-neutral-950 focus-within:ring-2 focus-within:ring-amber-400"><span className="flex items-center border-r border-white/10 px-4 text-sm font-black text-amber-400">+55 21</span><input value={whatsapp} onChange={(event) => setWhatsapp(somenteDigitos(event.target.value))} placeholder="9 0000-0000" inputMode="numeric" maxLength={9} className="min-w-0 flex-1 bg-transparent px-4 py-4 text-sm outline-none" /></div></label>
             {erro && <p className="mt-3 rounded-2xl bg-red-500/10 p-3 text-sm text-red-200">{erro}</p>}
             <button type="button" onClick={buscarReserva} className="mt-5 w-full rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950">Consultar reserva</button>
@@ -221,7 +221,7 @@ export default function ClientReservationLookup({ agendamentos, bloqueios, confi
 
   return (
     <>
-      <button type="button" onClick={() => setAberto(true)} className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black text-neutral-200">Consultar minha reserva</button>
+      <button type="button" onClick={() => setAberto(true)} className="mt-4 flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center text-xs font-black text-neutral-200 sm:w-auto">Consultar minha reserva</button>
       {modal && createPortal(modal, document.body)}
     </>
   );

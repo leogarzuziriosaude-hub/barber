@@ -119,7 +119,7 @@ export default function HistoricoPage() {
           <label className="block max-w-sm">
             <span className="text-xs font-black uppercase tracking-[.18em] text-amber-400">Código da reserva</span>
             <p className="mt-1 text-sm text-neutral-400">Digite o protocolo informado pelo cliente.</p>
-            <input value={codigoBusca} onChange={(event) => { setCodigoBusca(event.target.value.toUpperCase().slice(0, 11)); if (event.target.value) setPeriodo(""); }} placeholder="PH10-XXXXXX" autoCapitalize="characters" spellCheck={false} className="mt-4 w-full rounded-2xl bg-neutral-950 px-4 py-4 font-mono text-sm uppercase outline-none focus:ring-2 focus:ring-amber-400" />
+            <input value={codigoBusca} onChange={(event) => { setCodigoBusca(event.target.value.toUpperCase().slice(0, 11)); if (event.target.value) setPeriodo(""); }} placeholder="PH10-XXXXXX" autoCapitalize="characters" spellCheck={false} className="mt-4 w-full rounded-2xl bg-neutral-950 px-4 py-4 font-mono text-base uppercase outline-none focus:ring-2 focus:ring-amber-400" />
           </label>
         </section>
 

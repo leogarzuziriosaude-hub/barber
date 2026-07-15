@@ -491,13 +491,13 @@ export default function AgendaPage() {
       )}
 
       {modalBloqueioAberto && (
-        <div onClick={() => setModalBloqueioAberto(false)} className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 p-4">
-          <div onClick={(event) => event.stopPropagation()} className="w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl">
+        <div onClick={() => setModalBloqueioAberto(false)} className="safe-modal-shell fixed inset-0 z-[210] flex items-center justify-center bg-black/70">
+          <div onClick={(event) => event.stopPropagation()} className="safe-modal-card w-full max-w-md rounded-[2rem] bg-neutral-900 p-5 text-white shadow-2xl">
             <div className="flex items-start justify-between gap-4"><div><h2 className="text-2xl font-black">Bloquear período</h2><p className="mt-1 text-sm text-neutral-400">O período deixará de aparecer para os clientes.</p></div><button type="button" onClick={() => setModalBloqueioAberto(false)} className="rounded-full bg-white/10 px-3 py-2 text-sm font-black">×</button></div>
             <div className="mt-5 space-y-3">
               <label className="block"><span className="text-xs font-bold text-neutral-400">Data</span><input type="date" value={bloqueioData} onChange={(event) => setBloqueioData(event.target.value)} className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 outline-none focus:ring-2 focus:ring-amber-400" /></label>
               <button type="button" onClick={() => setBloqueioDiaInteiro((atual) => !atual)} className={`flex w-full items-center justify-between rounded-2xl border p-4 text-left ${bloqueioDiaInteiro ? "border-amber-400 bg-amber-400 text-neutral-950" : "border-white/10 bg-neutral-950"}`}><span className="font-black">Bloquear o dia inteiro</span><span>{bloqueioDiaInteiro ? "✓" : ""}</span></button>
-              {!bloqueioDiaInteiro && <div className="grid grid-cols-2 gap-3"><label><span className="text-xs font-bold text-neutral-400">Início</span><input type="time" value={bloqueioInicio} onChange={(event) => setBloqueioInicio(event.target.value)} className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 outline-none focus:ring-2 focus:ring-amber-400" /></label><label><span className="text-xs font-bold text-neutral-400">Fim</span><input type="time" value={bloqueioFim} onChange={(event) => setBloqueioFim(event.target.value)} className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 outline-none focus:ring-2 focus:ring-amber-400" /></label></div>}
+              {!bloqueioDiaInteiro && <div className="mobile-form-grid gap-3"><label className="min-w-0"><span className="text-xs font-bold text-neutral-400">Início</span><input type="time" value={bloqueioInicio} onChange={(event) => setBloqueioInicio(event.target.value)} className="mt-2 block w-full min-w-0 rounded-2xl bg-neutral-950 px-3 py-4 outline-none focus:ring-2 focus:ring-amber-400" /></label><label className="min-w-0"><span className="text-xs font-bold text-neutral-400">Fim</span><input type="time" value={bloqueioFim} onChange={(event) => setBloqueioFim(event.target.value)} className="mt-2 block w-full min-w-0 rounded-2xl bg-neutral-950 px-3 py-4 outline-none focus:ring-2 focus:ring-amber-400" /></label></div>}
               <label className="block"><span className="text-xs font-bold text-neutral-400">Motivo</span><input value={bloqueioMotivo} onChange={(event) => setBloqueioMotivo(event.target.value)} placeholder="Ex: Consulta médica" className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 outline-none focus:ring-2 focus:ring-amber-400" /></label>
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3"><button type="button" onClick={() => setModalBloqueioAberto(false)} className="rounded-2xl bg-white/10 px-4 py-4 text-sm font-black">Cancelar</button><button type="button" onClick={salvarBloqueio} className="rounded-2xl bg-amber-400 px-4 py-4 text-sm font-black text-neutral-950">Criar bloqueio</button></div>
@@ -661,8 +661,8 @@ export default function AgendaPage() {
 
                   {dia.ativo && diaExpandido === dia.id && (
                     <div className="mt-4 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <label className="block">
+                      <div className="mobile-form-grid gap-3">
+                        <label className="block min-w-0">
                           <span className="text-xs font-bold text-neutral-400">
                             Abertura
                           </span>
@@ -677,11 +677,11 @@ export default function AgendaPage() {
                                 event.target.value
                               )
                             }
-                            className="mt-2 w-full rounded-2xl bg-neutral-900 px-4 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                            className="mt-2 block w-full min-w-0 rounded-2xl bg-neutral-900 px-3 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
                           />
                         </label>
 
-                        <label className="block">
+                        <label className="block min-w-0">
                           <span className="text-xs font-bold text-neutral-400">
                             Fechamento
                           </span>
@@ -696,7 +696,7 @@ export default function AgendaPage() {
                                 event.target.value
                               )
                             }
-                            className="mt-2 w-full rounded-2xl bg-neutral-900 px-4 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                            className="mt-2 block w-full min-w-0 rounded-2xl bg-neutral-900 px-3 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
                           />
                         </label>
                       </div>
@@ -730,8 +730,8 @@ export default function AgendaPage() {
                         </div>
 
                         {dia.temPausa && (
-                          <div className="mt-4 grid grid-cols-2 gap-3">
-                            <label className="block">
+                          <div className="mobile-form-grid mt-4 gap-3">
+                            <label className="block min-w-0">
                               <span className="text-xs font-bold text-neutral-400">
                                 Início
                               </span>
@@ -746,11 +746,11 @@ export default function AgendaPage() {
                                     event.target.value
                                   )
                                 }
-                                className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                                className="mt-2 block w-full min-w-0 rounded-2xl bg-neutral-950 px-3 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
                               />
                             </label>
 
-                            <label className="block">
+                            <label className="block min-w-0">
                               <span className="text-xs font-bold text-neutral-400">
                                 Fim
                               </span>
@@ -765,7 +765,7 @@ export default function AgendaPage() {
                                     event.target.value
                                   )
                                 }
-                                className="mt-2 w-full rounded-2xl bg-neutral-950 px-4 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                                className="mt-2 block w-full min-w-0 rounded-2xl bg-neutral-950 px-3 py-4 text-sm outline-none focus:ring-2 focus:ring-amber-400"
                               />
                             </label>
                           </div>
