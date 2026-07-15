@@ -1,28 +1,30 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import ClientReservationLookup from "@/components/booking/ClientReservationLookup";
 import {
   Agendamento,
   BloqueioAgenda,
   Combo,
   ConfiguracaoAgenda,
+  PerfilBarbearia,
   Servico,
   carregarAgendamentos,
   carregarBloqueios,
   carregarCombos,
   carregarConfiguracaoAgenda,
+  carregarPerfil,
   carregarServicos,
   cadastrarOuAtualizarCliente,
   proximosDias,
   registrarAlteracaoAgendamento,
   reservaEstaAtiva,
   salvarAgendamentos,
+  perfilInicial,
 } from "@/lib/barber-storage";
 
 const idsDosDias = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
-// Temporário: futuramente virá do módulo Configurações.
-const whatsappPH10 = "5521994073006";
 
 function minutos(hora: string) { const [h, m] = hora.split(":").map(Number); return h * 60 + m; }
 function horaFormatada(total: number) { return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`; }
@@ -58,6 +60,7 @@ export default function PaginaCliente() {
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [combos, setCombos] = useState<Combo[]>([]);
   const [configuracao, setConfiguracao] = useState<ConfiguracaoAgenda | null>(null);
+  const [perfil, setPerfil] = useState<PerfilBarbearia>(perfilInicial);
   const [carregado, setCarregado] = useState(false);
   const [agora, setAgora] = useState(0);
   const [reservaConcluida, setReservaConcluida] = useState<Agendamento | null>(null);
@@ -74,6 +77,7 @@ export default function PaginaCliente() {
       setServicos(servicosAtivos);
       setCombos(combosAtivos);
       setConfiguracao(carregarConfiguracaoAgenda());
+      setPerfil(carregarPerfil());
       setAgora(Date.now());
       setCarregado(true);
     }
@@ -85,7 +89,16 @@ export default function PaginaCliente() {
     ...combos.map((combo) => ({ id: -combo.id, nome: combo.nome, duracao: combo.duracao, valor: combo.valor, status: "Ativo" as const })),
   ];
   const servico = opcoesAgendamento.find((item) => item.id === servicoId);
+  const whatsappPH10 = perfil.whatsapp;
   const duracaoSelecionada = Number(servico?.duracao.replace(/\D/g, "") || 0);
+  const funcionamentoHoje = useMemo(() => {
+    if (!configuracao || !agora) return "Horário de funcionamento não configurado";
+    const referencia = new Date(agora);
+    const expediente = configuracao.diasFuncionamento.find((item) => item.id === idsDosDias[referencia.getDay()]);
+    if (!expediente?.ativo) return "Fechado hoje";
+    const horario = `Hoje, ${expediente.abertura} às ${expediente.fechamento}`;
+    return expediente.temPausa ? `${horario} • pausa ${expediente.pausaInicio} às ${expediente.pausaFim}` : horario;
+  }, [configuracao, agora]);
   const dias = proximosDias(Number(configuracao?.configAgenda.diasParaAgendar ?? 7));
   const horarios = useMemo(() => {
     if (!configuracao) return [];
@@ -215,18 +228,33 @@ export default function PaginaCliente() {
     <main className="min-h-screen bg-[#24211e] text-[#f3ead8]">
       <div className="mx-auto w-full max-w-md px-4 py-5 lg:max-w-4xl">
         {!reservaConcluida && (
-          <header className="hero-panel">
-            <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-400">PH10</p>
-            <h1 className="mt-2 text-3xl font-black">Barbearia PH10</h1>
-            <p className="mt-2 text-sm text-neutral-400">Escolha o serviço, o dia e um horário disponível.</p>
-            <ClientReservationLookup
-              agendamentos={agendamentos}
-              bloqueios={bloqueios}
-              configuracao={configuracao}
-              whatsappPH10={whatsappPH10}
-              onAtualizar={setAgendamentos}
-            />
-          </header>
+          <>
+            <header className="hero-panel">
+              <div className="flex items-start gap-4">
+                <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-amber-400/30 bg-neutral-900 text-xl font-black text-amber-400">
+                  {perfil.foto ? <Image src={perfil.foto} alt={`Foto de ${perfil.nome}`} width={80} height={80} unoptimized className="h-full w-full object-cover" /> : "PH"}
+                </div>
+                <div className="min-w-0 pt-1">
+                  <p className="text-xs font-black uppercase tracking-[0.25em] text-amber-400">{perfil.subtitulo || "Barbearia"}</p>
+                  <h1 className="mt-1 text-2xl font-black sm:text-3xl">{perfil.nome}</h1>
+                </div>
+              </div>
+              <div className="mt-5 space-y-2 rounded-2xl border border-white/10 bg-black/10 p-4 text-sm">
+                <p className="font-bold text-neutral-200">{funcionamentoHoje}</p>
+                {perfil.endereco && <p className="leading-relaxed text-neutral-400">{perfil.endereco}</p>}
+              </div>
+              <p className="mt-4 text-sm text-neutral-400">Escolha o serviço, o dia e um horário disponível.</p>
+            </header>
+            <div className="flex justify-end">
+              <ClientReservationLookup
+                agendamentos={agendamentos}
+                bloqueios={bloqueios}
+                configuracao={configuracao}
+                whatsappPH10={whatsappPH10}
+                onAtualizar={setAgendamentos}
+              />
+            </div>
+          </>
         )}
 
         {reservaConcluida ? (

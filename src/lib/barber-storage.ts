@@ -4,12 +4,21 @@ export const COMBOS_KEY = "ph10:combos";
 export const AGENDA_CONFIG_KEY = "ph10:configuracao-agenda";
 export const BLOQUEIOS_KEY = "ph10:bloqueios";
 export const CLIENTES_KEY = "ph10:clientes";
+export const PERFIL_KEY = "ph10:perfil";
 
 export type Servico = { id: number; nome: string; duracao: string; valor: number; status: "Ativo" | "Inativo" };
 export type Combo = { id: number; nome: string; duracao: string; servicosIds: number[]; valor: number; descontoPercentual?: number; status: "Ativo" | "Inativo" };
 export type DiaFuncionamento = { id: string; nome: string; curto: string; ativo: boolean; abertura: string; fechamento: string; temPausa: boolean; pausaInicio: string; pausaFim: string };
 export type ConfigAgenda = { intervalo: "15" | "30" | "45" | "60"; antecedenciaMinima: "1" | "2" | "4" | "24"; diasParaAgendar: "7" | "15" | "30" };
 export type ConfiguracaoAgenda = { diasFuncionamento: DiaFuncionamento[]; configAgenda: ConfigAgenda };
+export type PerfilBarbearia = {
+  nome: string;
+  subtitulo: string;
+  responsavel: string;
+  whatsapp: string;
+  endereco: string;
+  foto: string;
+};
 export type BloqueioAgenda = { id: number; data: string; diaInteiro: boolean; inicio: string; fim: string; motivo: string };
 export type Cliente = {
   id: number;
@@ -136,6 +145,30 @@ export function carregarConfiguracaoAgenda(): ConfiguracaoAgenda | null {
 }
 export function salvarConfiguracaoAgenda(configuracao: ConfiguracaoAgenda) {
   localStorage.setItem(AGENDA_CONFIG_KEY, JSON.stringify(configuracao));
+}
+
+export const perfilInicial: PerfilBarbearia = {
+  nome: "Barbearia PH10",
+  subtitulo: "Estúdio masculino",
+  responsavel: "Pedro Henrique",
+  whatsapp: "5521994073006",
+  endereco: "",
+  foto: "",
+};
+
+export function carregarPerfil(): PerfilBarbearia {
+  if (typeof window === "undefined") return perfilInicial;
+  try {
+    const dados = localStorage.getItem(PERFIL_KEY);
+    return dados ? { ...perfilInicial, ...(JSON.parse(dados) as Partial<PerfilBarbearia>) } : perfilInicial;
+  } catch {
+    return perfilInicial;
+  }
+}
+
+export function salvarPerfil(perfil: PerfilBarbearia) {
+  localStorage.setItem(PERFIL_KEY, JSON.stringify(perfil));
+  window.dispatchEvent(new Event("ph10:perfil-atualizado"));
 }
 
 export function dataLocal(data = new Date()) {
