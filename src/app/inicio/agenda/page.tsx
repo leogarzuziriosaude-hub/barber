@@ -36,7 +36,6 @@ type Confirmacao =
   | { tipo: "status"; status: "Cancelado" | "Não compareceu"; item: Agendamento }
   | { tipo: "remover-bloqueio"; bloqueio: BloqueioAgenda };
 
-const dias = proximosDias(7);
 const idsDosDias = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
 
 const agendamentosIniciais: Agendamento[] = [];
@@ -182,6 +181,8 @@ export default function AgendaPage() {
 
   const [configAgenda, setConfigAgenda] =
     useState<ConfigAgenda>(configAgendaInicial);
+
+  const dias = proximosDias(7);
 
 
   useEffect(() => {

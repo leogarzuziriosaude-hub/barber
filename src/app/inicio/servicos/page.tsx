@@ -306,6 +306,32 @@ export default function ServicosPage() {
     setValorCombo(String(Math.max(0, valorOriginal * (1 - desconto / 100)).toFixed(2)));
   }
 
+  async function alternarStatusServico(servico: Servico) {
+    const novoStatus: Status = servico.status === "Ativo" ? "Inativo" : "Ativo";
+    try {
+      setProcessando(true);
+      await atualizarServico(criarClienteSupabase(), { ...servico, status: novoStatus });
+      await recarregarCatalogo();
+    } catch {
+      setAviso({ titulo: "Não foi possível alterar", descricao: `O serviço continua ${servico.status.toLowerCase()}.` });
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  async function alternarStatusCombo(combo: Combo) {
+    const novoStatus: Status = combo.status === "Ativo" ? "Inativo" : "Ativo";
+    try {
+      setProcessando(true);
+      await atualizarCombo(criarClienteSupabase(), { ...combo, status: novoStatus });
+      await recarregarCatalogo();
+    } catch {
+      setAviso({ titulo: "Não foi possível alterar", descricao: `O combo continua ${combo.status.toLowerCase()}.` });
+    } finally {
+      setProcessando(false);
+    }
+  }
+
   async function apagarServico() {
     if (!servicoParaApagar) return;
     try {
@@ -444,7 +470,7 @@ export default function ServicosPage() {
                       </p>
                     </div>
 
-                    <span className="rounded-full bg-green-500/10 px-3 py-1 text-[11px] font-black text-green-300">
+                    <span className={`rounded-full px-3 py-1 text-[11px] font-black ${servico.status === "Ativo" ? "bg-green-500/10 text-green-300" : "bg-white/10 text-neutral-400"}`}>
                       {servico.status}
                     </span>
                   </div>
@@ -464,10 +490,11 @@ export default function ServicosPage() {
 
                     <button
                       type="button"
-                      onClick={() => setServicoParaApagar(servico)}
-                      className="rounded-2xl bg-red-500/10 px-4 py-3 text-xs font-black text-red-300"
+                      onClick={() => alternarStatusServico(servico)}
+                      disabled={processando}
+                      className={`rounded-2xl px-4 py-3 text-xs font-black disabled:opacity-50 ${servico.status === "Ativo" ? "bg-amber-400/10 text-amber-300" : "bg-green-500/10 text-green-300"}`}
                     >
-                      Desativar
+                      {servico.status === "Ativo" ? "Desativar" : "Ativar"}
                     </button>
                   </div>
                 </article>
@@ -512,8 +539,8 @@ export default function ServicosPage() {
                         </p>
                       </div>
 
-                      <span className="rounded-full bg-amber-400/10 px-3 py-1 text-[11px] font-black text-amber-300">
-                        Combo
+                      <span className={`rounded-full px-3 py-1 text-[11px] font-black ${combo.status === "Ativo" ? "bg-green-500/10 text-green-300" : "bg-white/10 text-neutral-400"}`}>
+                        {combo.status}
                       </span>
                     </div>
 
@@ -540,10 +567,11 @@ export default function ServicosPage() {
 
                       <button
                         type="button"
-                        onClick={() => setComboParaApagar(combo)}
-                        className="rounded-2xl bg-red-500/10 px-4 py-3 text-xs font-black text-red-300"
+                        onClick={() => alternarStatusCombo(combo)}
+                        disabled={processando}
+                        className={`rounded-2xl px-4 py-3 text-xs font-black disabled:opacity-50 ${combo.status === "Ativo" ? "bg-amber-400/10 text-amber-300" : "bg-green-500/10 text-green-300"}`}
                       >
-                        Desativar
+                        {combo.status === "Ativo" ? "Desativar" : "Ativar"}
                       </button>
                     </div>
                   </article>
@@ -674,6 +702,15 @@ export default function ServicosPage() {
                 {processando ? "Salvando..." : "Salvar"}
               </button>
             </div>
+            {servicoEditando && (
+              <button
+                type="button"
+                onClick={() => { setModalTipo(null); setServicoParaApagar(servicoEditando); }}
+                className="mt-4 w-full py-2 text-xs font-bold text-red-300/70"
+              >
+                Excluir serviço definitivamente
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -804,6 +841,15 @@ export default function ServicosPage() {
                 {processando ? "Salvando..." : "Salvar"}
               </button>
             </div>
+            {comboEditando && (
+              <button
+                type="button"
+                onClick={() => { setModalTipo(null); setComboParaApagar(comboEditando); }}
+                className="mt-4 w-full py-2 text-xs font-bold text-red-300/70"
+              >
+                Excluir combo definitivamente
+              </button>
+            )}
           </div>
         </div>
       )}
