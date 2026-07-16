@@ -32,6 +32,42 @@ function somenteLetras(valor: string) {
   return valor.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ\s]/g, "").replace(/\s{2,}/g, " ");
 }
 function somenteDigitos(valor: string) { return valor.replace(/\D/g, "").slice(0, 9); }
+
+function CarregandoAgendamento() {
+  return (
+    <main className="min-h-screen bg-[#24211e] text-[#f3ead8]" aria-busy="true" aria-label="Carregando agendamento">
+      <div className="mx-auto w-full max-w-md animate-pulse px-4 py-5 lg:max-w-4xl">
+        <div className="hero-panel">
+          <div className="flex items-center gap-4 sm:gap-5">
+            <div className="h-28 w-28 shrink-0 rounded-full bg-white/10 sm:h-32 sm:w-32" />
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="h-2.5 w-24 rounded-full bg-amber-400/20" />
+              <div className="h-6 w-36 rounded-full bg-white/10" />
+              <div className="border-t border-white/10 pt-3">
+                <div className="h-3 w-40 rounded-full bg-white/10" />
+                <div className="mt-2 h-3 w-28 rounded-full bg-white/5" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-10 h-5 w-24 rounded-full bg-white/10" />
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          {[0, 1, 2].map((item) => <div key={item} className="h-[78px] rounded-3xl border border-white/5 bg-neutral-900/70" />)}
+        </div>
+        <div className="mt-7 h-5 w-12 rounded-full bg-white/10" />
+        <div className="mt-3 flex gap-3 overflow-hidden">
+          {[0, 1, 2, 3].map((item) => <div key={item} className="h-[72px] min-w-16 rounded-3xl border border-white/5 bg-neutral-900/70" />)}
+        </div>
+        <div className="mt-7 h-5 w-20 rounded-full bg-white/10" />
+        <div className="mt-3 grid grid-cols-3 gap-3">
+          {[0, 1, 2, 3, 4, 5].map((item) => <div key={item} className="h-12 rounded-2xl border border-white/5 bg-neutral-900/70" />)}
+        </div>
+        <p className="mt-6 text-center text-xs font-bold text-neutral-500">Carregando horários...</p>
+      </div>
+    </main>
+  );
+}
+
 export default function PaginaCliente() {
   const [selecoes, setSelecoes] = useState<string[]>([]);
   const [dia, setDia] = useState(() => proximosDias(1)[0].data);
@@ -65,6 +101,22 @@ export default function PaginaCliente() {
         const dados = await respostaConfiguracao.json() as { perfil: PerfilBarbearia; configuracao: ConfiguracaoAgenda };
         const catalogo = await respostaCatalogo.json() as { servicos: Servico[]; combos: Combo[] };
         const disponibilidade = await respostaDisponibilidade.json() as { agendamentos: Array<Pick<Agendamento, "id" | "data" | "hora" | "duracaoMinutos">>; bloqueios: BloqueioAgenda[] };
+        if (dados.perfil.foto) {
+          await new Promise<void>((resolve) => {
+            const imagem = new window.Image();
+            let finalizado = false;
+            const concluir = () => {
+              if (finalizado) return;
+              finalizado = true;
+              window.clearTimeout(limite);
+              resolve();
+            };
+            const limite = window.setTimeout(concluir, 2500);
+            imagem.onload = concluir;
+            imagem.onerror = concluir;
+            imagem.src = dados.perfil.foto;
+          });
+        }
         if (ativo) {
           setConfiguracao(dados.configuracao);
           setPerfil(dados.perfil);
@@ -219,6 +271,8 @@ export default function PaginaCliente() {
     );
     return `https://wa.me/${whatsappPH10}?text=${mensagem}`;
   }
+
+  if (!carregado) return <CarregandoAgendamento />;
 
   return (
     <main className="min-h-screen bg-[#24211e] text-[#f3ead8]">
